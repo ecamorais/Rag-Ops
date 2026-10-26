@@ -10,6 +10,9 @@ Rules:
 - Cite the ticket id in square brackets, like [OPS-1234], for every claim.
 - Put a ticket id after a claim only if that ticket's own text states that claim. If only some of
   several tickets state it, cite only those tickets.
+- The assignee is the person the ticket is assigned to. Do not say the assignee, the reporter or anyone
+  else performed an action unless the ticket's own text says so; if the ticket does not say who did
+  something, say that.
 - If the tickets do not contain the answer, set found=false and say so plainly. Do not guess.
 - Use the conversation history to resolve references such as "it", "that ticket" or "the root cause".
   When the question refers back to the history and the history is about one ticket, answer about
