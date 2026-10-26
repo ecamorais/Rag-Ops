@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Ops Ticket Assistant</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Not deferred on purpose: it sets the saved theme before the first paint. It starts the page on DOMContentLoaded. -->
+  <script src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#question">Skip to the question box</a>
+
+  <header class="app-header">
+    <button type="button" id="sidebar-toggle" class="button sidebar-toggle" aria-controls="sidebar" aria-expanded="false">Filters</button>
+    <h1 class="app-title">Ops Ticket Assistant</h1>
+    <p id="index-status" class="index-status" role="status"></p>
+    <button type="button" id="theme-toggle" class="button" aria-pressed="false">Theme</button>
+  </header>
+
+  <noscript>
+    <p class="notice">This page needs JavaScript to run.</p>
+  </noscript>
+
+  <div class="layout">
+    <aside id="sidebar" class="sidebar" aria-label="Filters and settings">
+      <div class="sidebar-head">
+        <h2 class="sidebar-title">Filters</h2>
+        <button type="button" id="sidebar-close" class="button sidebar-close">Close</button>
+      </div>
+
+      <p id="filters-notice" class="notice" hidden></p>
+      <button type="button" id="filters-reload" class="button" hidden>Reload filters</button>
+
+      <form id="filters-form" class="filters" autocomplete="off">
+        <div class="field">
+          <label for="filter-category">Category</label>
+          <select id="filter-category" name="category"><option value="">Any</option></select>
+        </div>
+        <div class="field">
+          <label for="filter-priority">Priority</label>
+          <select id="filter-priority" name="priority"><option value="">Any</option></select>
+        </div>
+        <div class="field">
+          <label for="filter-status">Status</label>
+          <select id="filter-status" name="status"><option value="">Any</option></select>
+        </div>
+        <div class="field">
+          <label for="filter-team">Team</label>
+          <select id="filter-team" name="team"><option value="">Any</option></select>
+        </div>
+        <div class="field">
+          <label for="filter-date-from">Created from</label>
+          <input type="date" id="filter-date-from" name="date_from">
+        </div>
+        <div class="field">
+          <label for="filter-date-to">Created to</label>
+          <input type="date" id="filter-date-to" name="date_to">
+        </div>
+        <p id="date-error" class="field-error" role="alert" hidden></p>
+        <div class="field">
+          <label for="k-input">Results per question</label>
+          <input type="number" id="k-input" name="k" min="3" max="10" step="1" value="6" inputmode="numeric" aria-describedby="k-hint">
+          <p id="k-hint" class="hint">How many tickets are retrieved for each question (3 to 10).</p>
+        </div>
+        <div class="button-row">
+          <button type="button" id="clear-filters" class="button">Clear filters</button>
+          <button type="button" id="new-chat" class="button">New chat</button>
+        </div>
+      </form>
+    </aside>
+    <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
+
+    <main class="main">
+      <div id="thread" class="thread" role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation" tabindex="0">
+        <section id="empty-state" class="empty-state" aria-labelledby="empty-title">
+          <h2 id="empty-title">Ask about the operations tickets</h2>
+          <p>Answers come only from the tickets that are retrieved for your question, and every claim cites a ticket id. If the tickets do not contain the answer, the assistant says so.</p>
+          <p class="hint">Try one of these:</p>
+          <ul class="examples">
+            <li><button type="button" class="example">What caused the recurring VPN outages and how were they fixed?</button></li>
+            <li><button type="button" class="example">What happened in ticket OPS-1001?</button></li>
+            <li><button type="button" class="example">Show me P1 cooling or power problems</button></li>
+            <li><button type="button" class="example">Which tickets mention late deliveries from a vendor?</button></li>
+          </ul>
+        </section>
+      </div>
+
+      <button type="button" id="jump-latest" class="button jump-latest" hidden>Jump to latest</button>
+
+      <form id="composer" class="composer" novalidate>
+        <ul id="active-filters" class="active-filters" aria-label="Active filters" hidden></ul>
+        <div class="composer-row">
+          <label for="question" class="visually-hidden">Your question</label>
+          <textarea id="question" name="question" rows="2" maxlength="1000" placeholder="Ask about a ticket, a problem or a pattern" aria-describedby="question-help char-count"></textarea>
+          <button type="submit" id="send" class="button button-primary" disabled>Send</button>
+        </div>
+        <p id="question-help" class="visually-hidden">Enter sends. Shift and Enter insert a new line. Up to 1000 characters.</p>
+        <p id="char-count" class="char-count" hidden></p>
+      </form>
+    </main>
+  </div>
+
+  <dialog id="drawer" class="drawer" aria-labelledby="drawer-title">
+    <div class="drawer-bar">
+      <h2 id="drawer-title" class="drawer-title" tabindex="-1">Ticket</h2>
+      <button type="button" id="drawer-close" class="button">Close</button>
+    </div>
+    <div id="drawer-body" class="drawer-body" aria-busy="false"></div>
+  </dialog>
+</body>
+</html>

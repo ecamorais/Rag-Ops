@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+chromadb
+sentence-transformers
+google-genai
+python-dotenv
+pydantic
+pytest
+httpx

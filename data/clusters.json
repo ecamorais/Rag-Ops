@@ -1,0 +1,645 @@
+{
+  "seed": 42,
+  "as_of": "2026-10-25T12:00:00",
+  "clusters": [
+    {
+      "cluster_id": "CL-01",
+      "type": "single_category",
+      "categories": [
+        "Access & Security"
+      ],
+      "scenario_ids": [
+        "SEC-06"
+      ],
+      "root_cause": "The HR leaver feed to the identity system was delayed by several days.",
+      "ticket_ids": [
+        "OPS-1741",
+        "OPS-1751",
+        "OPS-1775"
+      ]
+    },
+    {
+      "cluster_id": "CL-02",
+      "type": "single_category",
+      "categories": [
+        "Inventory"
+      ],
+      "scenario_ids": [
+        "INV-08"
+      ],
+      "root_cause": "The supplier lead time increased but the planning parameters were never updated.",
+      "ticket_ids": [
+        "OPS-1748",
+        "OPS-1762",
+        "OPS-1765",
+        "OPS-1790",
+        "OPS-1791",
+        "OPS-1795"
+      ]
+    },
+    {
+      "cluster_id": "CL-03",
+      "type": "single_category",
+      "categories": [
+        "Inventory"
+      ],
+      "scenario_ids": [
+        "INV-05"
+      ],
+      "root_cause": "Items were repeatedly slotted into neighbouring bins that look alike.",
+      "ticket_ids": [
+        "OPS-1698",
+        "OPS-1722",
+        "OPS-1768",
+        "OPS-1783"
+      ]
+    },
+    {
+      "cluster_id": "CL-04",
+      "type": "single_category",
+      "categories": [
+        "Customer Escalation"
+      ],
+      "scenario_ids": [
+        "CE-05"
+      ],
+      "root_cause": "The carrier tracking feed to the TMS stopped updating after an API token expired.",
+      "ticket_ids": [
+        "OPS-1542",
+        "OPS-1552",
+        "OPS-1570"
+      ]
+    },
+    {
+      "cluster_id": "CL-05",
+      "type": "single_category",
+      "categories": [
+        "Infrastructure"
+      ],
+      "scenario_ids": [
+        "INF-01"
+      ],
+      "root_cause": "pg-tracking-01 failed over after a storage latency spike, and the connection pool on wms-app-prod-02 kept pointing at the old primary.",
+      "ticket_ids": [
+        "OPS-1046",
+        "OPS-1058",
+        "OPS-1070",
+        "OPS-1096"
+      ]
+    },
+    {
+      "cluster_id": "CL-06",
+      "type": "single_category",
+      "categories": [
+        "Logistics"
+      ],
+      "scenario_ids": [
+        "LOG-01"
+      ],
+      "root_cause": "A pallet delivery from NorthStar Components was missed and the reorder point had been set too low.",
+      "ticket_ids": [
+        "OPS-1709",
+        "OPS-1756",
+        "OPS-1766",
+        "OPS-1786",
+        "OPS-1789"
+      ]
+    },
+    {
+      "cluster_id": "CL-07",
+      "type": "single_category",
+      "categories": [
+        "Vendor Management"
+      ],
+      "scenario_ids": [
+        "VEN-08"
+      ],
+      "root_cause": "The vendor accounts were locked after repeated failed MFA attempts.",
+      "ticket_ids": [
+        "OPS-1449",
+        "OPS-1450",
+        "OPS-1494",
+        "OPS-1538"
+      ]
+    },
+    {
+      "cluster_id": "CL-08",
+      "type": "single_category",
+      "categories": [
+        "Inventory"
+      ],
+      "scenario_ids": [
+        "INV-07"
+      ],
+      "root_cause": "Putaway went to a wrong bin because the label printer produced a misaligned barcode.",
+      "ticket_ids": [
+        "OPS-1286",
+        "OPS-1307",
+        "OPS-1332",
+        "OPS-1348"
+      ]
+    },
+    {
+      "cluster_id": "CL-09",
+      "type": "single_category",
+      "categories": [
+        "Infrastructure"
+      ],
+      "scenario_ids": [
+        "INF-07"
+      ],
+      "root_cause": "A stale record after a migration was cached as NXDOMAIN on the secondary resolver at Bengaluru.",
+      "ticket_ids": [
+        "OPS-1184",
+        "OPS-1259",
+        "OPS-1272"
+      ]
+    },
+    {
+      "cluster_id": "CL-10",
+      "type": "single_category",
+      "categories": [
+        "Customer Escalation"
+      ],
+      "scenario_ids": [
+        "CE-04"
+      ],
+      "root_cause": "SwiftHaul used an under-resourced route for the customer area with frequent driver changes.",
+      "ticket_ids": [
+        "OPS-1420",
+        "OPS-1474",
+        "OPS-1488",
+        "OPS-1503"
+      ]
+    },
+    {
+      "cluster_id": "CL-11",
+      "type": "single_category",
+      "categories": [
+        "Billing & Finance"
+      ],
+      "scenario_ids": [
+        "FIN-03"
+      ],
+      "root_cause": "A new beneficiary account number had the wrong format and invalidated the whole batch.",
+      "ticket_ids": [
+        "OPS-1340",
+        "OPS-1375",
+        "OPS-1407"
+      ]
+    },
+    {
+      "cluster_id": "CL-12",
+      "type": "single_category",
+      "categories": [
+        "Vendor Management"
+      ],
+      "scenario_ids": [
+        "VEN-07"
+      ],
+      "root_cause": "Gateway Fasteners applied an annual escalation clause that does not exist in the current contract.",
+      "ticket_ids": [
+        "OPS-1017",
+        "OPS-1026",
+        "OPS-1049",
+        "OPS-1066"
+      ]
+    },
+    {
+      "cluster_id": "CL-13",
+      "type": "single_category",
+      "categories": [
+        "Logistics"
+      ],
+      "scenario_ids": [
+        "LOG-07"
+      ],
+      "root_cause": "A faulty door seal let warm air in and the compressor could not keep up.",
+      "ticket_ids": [
+        "OPS-1089",
+        "OPS-1115",
+        "OPS-1126",
+        "OPS-1180"
+      ]
+    },
+    {
+      "cluster_id": "CL-14",
+      "type": "single_category",
+      "categories": [
+        "Access & Security"
+      ],
+      "scenario_ids": [
+        "SEC-09"
+      ],
+      "root_cause": "A rule was added with a deny that sat above the existing allow for the service subnet.",
+      "ticket_ids": [
+        "OPS-1663",
+        "OPS-1689",
+        "OPS-1693",
+        "OPS-1707",
+        "OPS-1716"
+      ]
+    },
+    {
+      "cluster_id": "CL-15",
+      "type": "single_category",
+      "categories": [
+        "Billing & Finance"
+      ],
+      "scenario_ids": [
+        "FIN-08"
+      ],
+      "root_cause": "The approver was on leave and the delegation was not set.",
+      "ticket_ids": [
+        "OPS-1330",
+        "OPS-1353",
+        "OPS-1390",
+        "OPS-1406",
+        "OPS-1422"
+      ]
+    },
+    {
+      "cluster_id": "CL-16",
+      "type": "single_category",
+      "categories": [
+        "Infrastructure"
+      ],
+      "scenario_ids": [
+        "INF-04"
+      ],
+      "root_cause": "The auto-renewal job failed silently because the DNS challenge record had been removed.",
+      "ticket_ids": [
+        "OPS-1631",
+        "OPS-1658",
+        "OPS-1659",
+        "OPS-1682",
+        "OPS-1731"
+      ]
+    },
+    {
+      "cluster_id": "CL-17",
+      "type": "single_category",
+      "categories": [
+        "Access & Security"
+      ],
+      "scenario_ids": [
+        "SEC-01"
+      ],
+      "root_cause": "A cached credential on a shared kiosk kept retrying an old password and triggered the lockout policy.",
+      "ticket_ids": [
+        "OPS-1681",
+        "OPS-1754",
+        "OPS-1779"
+      ]
+    },
+    {
+      "cluster_id": "CL-18",
+      "type": "single_category",
+      "categories": [
+        "Access & Security"
+      ],
+      "scenario_ids": [
+        "SEC-04"
+      ],
+      "root_cause": "The approval workflow was routed to a manager who had moved teams.",
+      "ticket_ids": [
+        "OPS-1652",
+        "OPS-1692",
+        "OPS-1720"
+      ]
+    },
+    {
+      "cluster_id": "CL-19",
+      "type": "single_category",
+      "categories": [
+        "Customer Escalation"
+      ],
+      "scenario_ids": [
+        "CE-03"
+      ],
+      "root_cause": "Delivery delays on the BlueLine Logistics lane caused the misses.",
+      "ticket_ids": [
+        "OPS-1604",
+        "OPS-1678",
+        "OPS-1684"
+      ]
+    },
+    {
+      "cluster_id": "CL-20",
+      "type": "single_category",
+      "categories": [
+        "Facilities"
+      ],
+      "scenario_ids": [
+        "FAC-09"
+      ],
+      "root_cause": "The contractor had a staff shortage and prioritised another site.",
+      "ticket_ids": [
+        "OPS-1464",
+        "OPS-1481",
+        "OPS-1483",
+        "OPS-1501",
+        "OPS-1572",
+        "OPS-1573"
+      ]
+    },
+    {
+      "cluster_id": "CL-21",
+      "type": "single_category",
+      "categories": [
+        "Logistics"
+      ],
+      "scenario_ids": [
+        "LOG-03"
+      ],
+      "root_cause": "A transposed hub code in the TMS mapping for Hyderabad produced incorrect routing labels.",
+      "ticket_ids": [
+        "OPS-1203",
+        "OPS-1218",
+        "OPS-1289"
+      ]
+    },
+    {
+      "cluster_id": "CL-22",
+      "type": "single_category",
+      "categories": [
+        "Facilities"
+      ],
+      "scenario_ids": [
+        "FAC-01"
+      ],
+      "root_cause": "A tripped compressor contactor shut down the primary cooling unit.",
+      "ticket_ids": [
+        "OPS-1460",
+        "OPS-1461",
+        "OPS-1482",
+        "OPS-1555",
+        "OPS-1560"
+      ]
+    },
+    {
+      "cluster_id": "CL-23",
+      "type": "single_category",
+      "categories": [
+        "Facilities"
+      ],
+      "scenario_ids": [
+        "FAC-06"
+      ],
+      "root_cause": "Gaps under a dock door gave access to pests.",
+      "ticket_ids": [
+        "OPS-1249",
+        "OPS-1302",
+        "OPS-1311"
+      ]
+    },
+    {
+      "cluster_id": "CL-24",
+      "type": "single_category",
+      "categories": [
+        "Billing & Finance"
+      ],
+      "scenario_ids": [
+        "FIN-10"
+      ],
+      "root_cause": "RoadRunner Express applied a fuel surcharge that is not part of the contract.",
+      "ticket_ids": [
+        "OPS-1392",
+        "OPS-1398",
+        "OPS-1400",
+        "OPS-1467",
+        "OPS-1478"
+      ]
+    },
+    {
+      "cluster_id": "CL-25",
+      "type": "single_category",
+      "categories": [
+        "Vendor Management"
+      ],
+      "scenario_ids": [
+        "VEN-05"
+      ],
+      "root_cause": "The GST certificate on file was unreadable and the check could not be completed.",
+      "ticket_ids": [
+        "OPS-1553",
+        "OPS-1563",
+        "OPS-1607",
+        "OPS-1649"
+      ]
+    },
+    {
+      "cluster_id": "CL-26",
+      "type": "cross_category",
+      "event": "VPN gateway outage",
+      "categories": [
+        "Infrastructure",
+        "Customer Escalation"
+      ],
+      "scenario_ids": [
+        "INF-11",
+        "CE-11"
+      ],
+      "root_cause": "A firmware upgrade on vpn-gw-maa-01 left the IKE service in a crash loop.",
+      "root_causes_by_category": {
+        "Infrastructure": "A firmware upgrade on vpn-gw-maa-01 left the IKE service in a crash loop.",
+        "Customer Escalation": "The VPN gateway vpn-gw-maa-01 outage cut off partner connectivity to the integration endpoint."
+      },
+      "ticket_ids": [
+        "OPS-1266",
+        "OPS-1267",
+        "OPS-1268",
+        "OPS-1269",
+        "OPS-1270",
+        "OPS-1271"
+      ]
+    },
+    {
+      "cluster_id": "CL-27",
+      "type": "cross_category",
+      "event": "Site power outage",
+      "categories": [
+        "Facilities",
+        "Logistics"
+      ],
+      "scenario_ids": [
+        "FAC-11",
+        "LOG-12"
+      ],
+      "root_cause": "A grid failure at Chennai coincided with a faulty transfer switch, so the generator never took the load.",
+      "root_causes_by_category": {
+        "Facilities": "A grid failure at Chennai coincided with a faulty transfer switch, so the generator never took the load.",
+        "Logistics": "A grid failure at Chennai coincided with a faulty transfer switch, so the generator never took the load."
+      },
+      "ticket_ids": [
+        "OPS-1210",
+        "OPS-1211",
+        "OPS-1214",
+        "OPS-1215",
+        "OPS-1216",
+        "OPS-1219"
+      ]
+    },
+    {
+      "cluster_id": "CL-28",
+      "type": "cross_category",
+      "event": "Vendor payment run blocked",
+      "categories": [
+        "Billing & Finance",
+        "Vendor Management"
+      ],
+      "scenario_ids": [
+        "FIN-11",
+        "VEN-11"
+      ],
+      "root_cause": "The payment run for Orion Cold Systems was rejected by the bank with error E2209 and the invoices were never re-paid.",
+      "root_causes_by_category": {
+        "Billing & Finance": "The payment run for Orion Cold Systems was rejected by the bank with error E2209 and the invoices were never re-paid.",
+        "Vendor Management": "The payment run for Orion Cold Systems was rejected by the bank with error E2209 and the invoices were never re-paid."
+      },
+      "ticket_ids": [
+        "OPS-1531",
+        "OPS-1532",
+        "OPS-1533",
+        "OPS-1534",
+        "OPS-1535"
+      ]
+    },
+    {
+      "cluster_id": "CL-29",
+      "type": "cross_category",
+      "event": "SSO identity provider outage",
+      "categories": [
+        "Access & Security",
+        "Customer Escalation"
+      ],
+      "scenario_ids": [
+        "SEC-11",
+        "CE-12"
+      ],
+      "root_cause": "The SSO identity provider certificate expired, so all federated logins failed.",
+      "root_causes_by_category": {
+        "Access & Security": "The SSO identity provider certificate expired, so all federated logins failed.",
+        "Customer Escalation": "The SSO identity provider certificate expired, so all federated logins failed."
+      },
+      "ticket_ids": [
+        "OPS-1106",
+        "OPS-1107",
+        "OPS-1108",
+        "OPS-1109",
+        "OPS-1110",
+        "OPS-1112"
+      ]
+    },
+    {
+      "cluster_id": "CL-30",
+      "type": "cross_category",
+      "event": "WMS inventory sync double-applied adjustments",
+      "categories": [
+        "Inventory",
+        "Logistics"
+      ],
+      "scenario_ids": [
+        "INV-11",
+        "LOG-11"
+      ],
+      "root_cause": "A WMS sync job at Hyderabad double-applied inventory adjustments after a retry.",
+      "root_causes_by_category": {
+        "Inventory": "A WMS sync job at Hyderabad double-applied inventory adjustments after a retry.",
+        "Logistics": "A WMS sync job at Hyderabad double-applied inventory adjustments after a retry."
+      },
+      "ticket_ids": [
+        "OPS-1354",
+        "OPS-1355",
+        "OPS-1357",
+        "OPS-1358",
+        "OPS-1361",
+        "OPS-1362"
+      ]
+    }
+  ],
+  "near_duplicates": [
+    {
+      "original_id": "OPS-1020",
+      "duplicate_id": "OPS-1025"
+    },
+    {
+      "original_id": "OPS-1048",
+      "duplicate_id": "OPS-1050"
+    },
+    {
+      "original_id": "OPS-1223",
+      "duplicate_id": "OPS-1225"
+    },
+    {
+      "original_id": "OPS-1233",
+      "duplicate_id": "OPS-1237"
+    },
+    {
+      "original_id": "OPS-1253",
+      "duplicate_id": "OPS-1255"
+    },
+    {
+      "original_id": "OPS-1254",
+      "duplicate_id": "OPS-1257"
+    },
+    {
+      "original_id": "OPS-1352",
+      "duplicate_id": "OPS-1360"
+    },
+    {
+      "original_id": "OPS-1382",
+      "duplicate_id": "OPS-1384"
+    },
+    {
+      "original_id": "OPS-1433",
+      "duplicate_id": "OPS-1435"
+    },
+    {
+      "original_id": "OPS-1463",
+      "duplicate_id": "OPS-1469"
+    },
+    {
+      "original_id": "OPS-1465",
+      "duplicate_id": "OPS-1470"
+    },
+    {
+      "original_id": "OPS-1546",
+      "duplicate_id": "OPS-1550"
+    },
+    {
+      "original_id": "OPS-1642",
+      "duplicate_id": "OPS-1647"
+    },
+    {
+      "original_id": "OPS-1718",
+      "duplicate_id": "OPS-1723"
+    },
+    {
+      "original_id": "OPS-1788",
+      "duplicate_id": "OPS-1792"
+    }
+  ],
+  "vague_ticket_ids": [
+    "OPS-1023",
+    "OPS-1091",
+    "OPS-1097",
+    "OPS-1155",
+    "OPS-1207",
+    "OPS-1240",
+    "OPS-1258",
+    "OPS-1299",
+    "OPS-1379",
+    "OPS-1409",
+    "OPS-1459",
+    "OPS-1471",
+    "OPS-1519",
+    "OPS-1528",
+    "OPS-1562",
+    "OPS-1611",
+    "OPS-1627",
+    "OPS-1632",
+    "OPS-1637",
+    "OPS-1701"
+  ]
+}
