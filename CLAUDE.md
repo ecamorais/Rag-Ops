@@ -1,17 +1,16 @@
 # ops-rag
 
 RAG system over a dummy "Operations Tickets" dataset (800 tickets) with a web chat interface.
-Current status: Dataset generated, indexed in ChromaDB, answerable from the command line with Gemini (grounded answers with validated citations), and served by a FastAPI backend (health, filters, search, ticket detail, chat). The backend is validated against a running server over real sockets: health, filters, search, tickets, input validation, CORS, path traversal, the empty-collection startup warning, and the `/chat` paths that need no model. `/chat` with a real Gemini answer is NOT yet validated (waiting for the daily quota reset). Not built yet: the chat UI.
+Current status: Dataset generated, indexed in ChromaDB, answerable from the command line with Gemini (grounded answers with validated citations), and served by a FastAPI backend (health, filters, search, ticket detail, chat). The backend is validated against a running server over real sockets: health, filters, search, tickets, input validation, CORS, path traversal, the empty-collection startup warning, and the `/chat` paths that need no model. On 2026-10-26 four real `/chat` calls succeeded on `gemini-3.6-flash` (the VPN question, the root-cause follow-up, and the vendor question with and without history). Findings: the VPN answer slightly over-attributed a cause (it cited two tickets for a firmware cause they do not state), the root-cause follow-up ignored the history, and the vendor question could not be answered (aggregation: only 6 of 800 tickets are retrieved). The prompt rules, the follow-up retrieval rule and the ticket details line were changed or added after those calls and have NOT been re-tested on real Gemini. The chat UI is only started: `static/index.html` and `static/style.css` exist, `static/app.js` does not yet.
 
 Phase 3 status (RAG core, CLI only):
 - Validated on real Gemini: the VPN question, the OPS-1001 lookup, the OPS-1001 follow-up, the P1 filter (`--priority P1-Critical`). These ran on `gemini-3.6-flash`, except the P1 filter, which ran on `gemini-3.5-flash`.
 - Validated without a model call: off-topic refusal, OPS-9999 (not-found answer), the prompt-injection escaping path, retrieval for inherited-id follow-ups.
-- NOT yet validated on real Gemini (waiting for the daily quota reset): the answers for the root-cause follow-up, the topic-change follow-up, the vendor-delays question, and a repeat of the VPN question.
-  - A successful answer under the current llm.py (the fast-fail 429 rule has only been exercised on a real error and offline).
+- Real Gemini on 2026-10-26 (`gemini-3.6-flash`): four `/chat` calls succeeded (VPN question, root-cause follow-up, vendor question with and without history); the findings are in the status line above.
+  - NOT yet re-tested on real Gemini: the changed prompt rules, the changed follow-up retrieval and the ticket details line (all made after those calls).
 - Known limits:
   - Vector search ranks exact ids poorly (handled by the exact-id lookup in `app/rag.py`).
   - Aggregation questions ("which vendor has the most...") are weak (Phase 7c).
-  - Assignee, team and created date are not in the prompt (Phase 3 follow-up).
   - Free-tier Gemini has small daily quotas.
 
 ## Stack and decisions
@@ -113,9 +112,14 @@ normal `detail` list. Interactive docs are at `/docs`.
 - Wrong-method requests to an API route (for example `GET /chat`) return 404 instead of 405, because the static mount at `/` matches first.
 - Anything placed in `static/` is public (this includes `.gitkeep`).
 - A client disconnect does not cancel a running `/chat` call; the Gemini call and its quota use still happen.
-- `/chat` still needs a test with a real Gemini answer after the quota reset.
+- `/chat` was tested with four real Gemini calls on 2026-10-26 (`gemini-3.6-flash`): the VPN question, the root-cause follow-up, and the vendor question with and without history. Findings: the VPN answer slightly over-attributed a cause (two tickets cited for a firmware cause they do not state); the root-cause follow-up ignored the history and answered for six unrelated tickets; the vendor question could not be answered (aggregation: only 6 tickets are retrieved, and the likely answer, Lotus Stretch Wrap with 3 tickets whose titles say delayed or late, was not among them). The prompt rules, the follow-up retrieval rule and the ticket details line were changed or added after these calls and have NOT been re-tested on real Gemini.
 - Gemini calls are serialised per model (one HTTP attempt at a time), so a hung request delays others for up to the 60 s timeout.
 - The quota guard forgets on restart (it is in memory only).
+- Follow-ups: when the new question names no ticket, the ticket from an earlier user turn is kept first in the context. On a topic change that ticket still takes slot 1, and the rest of the context comes from searching with the new question alone.
+- How far back the inheritance looks: the most recent user turn that named a ticket within the last 6 history messages. A later user turn that was a topic change (by the same rule) ends the inheritance, and so does a ticket that does not exist. Ids that appear only in assistant replies are ignored.
+- Inherited tickets ignore the sidebar filters (like any ticket fetched by id), so with a filter set the inherited ticket can still appear first even if it does not match.
+- The follow-up rule (`about_inherited_ticket` in `app/rag.py`) is word-list based, not semantic: a question made only of filler words, ticket-property words and words from the inherited ticket's own text is treated as being about that ticket, and any other word counts as a topic change, so unusual wording can end the inheritance.
+- Each ticket in the prompt now has one details line (assignee, team, reporter, created, resolved), taken from `data/tickets.json` and not from the embedded document. The file is read once per process, on the first question, so regenerating it needs a restart. This has NOT been tested on real Gemini yet.
 
 ## Dataset
 The dataset is seeded (seed 42) with a fixed "as of" date (2026-10-25), so it is reproducible: running
