@@ -33,6 +33,20 @@ LOCAL_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 # Retry-After on a 429 is capped at one day.
 MAX_RETRY_AFTER = 86400
 
+# Sent on every response except the interactive API docs. The page needs nothing but its own files, so everything
+# else is switched off: no inline script or style, no other origins, no framing, no <base>.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; "
+        "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+# Swagger UI and ReDoc load their scripts and styles from a CDN (and Swagger runs an inline script), which this
+# policy would block, so these paths are left alone.
+NO_SECURITY_HEADERS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
+
 # First match wins, so subclasses are listed before LlmError itself.
 LLM_ERROR_STATUS = (
     (llm.RateLimitError, 429, "rate_limited"),
@@ -122,8 +136,19 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# Added AFTER the logging middleware on purpose: the last middleware added is the outermost one,
-# so CORS wraps logging and every response, including the 500 built above, carries the CORS headers.
+# Defined AFTER the logging middleware on purpose: the last middleware added is the outermost one, so this wraps
+# logging and the 500 it builds, and error responses (404, 422, 429, 500) carry the headers like any other.
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path not in NO_SECURITY_HEADERS_PATHS:
+        response.headers.update(SECURITY_HEADERS)
+    return response
+
+
+# Added AFTER the two middlewares above on purpose: the last middleware added is the outermost one,
+# so CORS wraps logging, the security headers and every response, including the 500 built above, and
+# every one of them carries the CORS headers.
 # Side effect: CORS answers preflight (OPTIONS) requests itself, so those are not logged.
 app.add_middleware(
     CORSMiddleware,
