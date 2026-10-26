@@ -6,13 +6,13 @@
   <meta name="color-scheme" content="light dark">
   <title>Ops Ticket Assistant</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <!-- Not deferred on purpose: it sets the saved theme before the first paint. It starts the page on DOMContentLoaded. -->
   <script src="app.js"></script>
 </head>
 <body>
-  <a class="skip-link" href="#question">Skip to the question box</a>
-
-  <header class="app-header">
+  <header class="app-header" id="app-header">
+    <a class="skip-link" href="#question">Skip to the question box</a>
     <button type="button" id="sidebar-toggle" class="button sidebar-toggle" aria-controls="sidebar" aria-expanded="false">Filters</button>
     <h1 class="app-title">Ops Ticket Assistant</h1>
     <p id="index-status" class="index-status" role="status"></p>
@@ -72,7 +72,7 @@
     </aside>
     <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
 
-    <main class="main">
+    <main class="main" id="main-area">
       <div id="thread" class="thread" role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation" tabindex="0">
         <section id="empty-state" class="empty-state" aria-labelledby="empty-title">
           <h2 id="empty-title">Ask about the operations tickets</h2>

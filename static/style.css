@@ -397,9 +397,10 @@ label { display: block; margin-bottom: 2px; font-size: 0.9rem; font-weight: 600;
 /* ---------- sources ---------- */
 .sources { margin-top: 8px; }
 .sources-summary { cursor: pointer; color: var(--accent); font-weight: 600; }
-.source-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.source-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .source-card {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   width: 100%;
   font: inherit;
@@ -413,9 +414,10 @@ label { display: block; margin-bottom: 2px; font-size: 0.9rem; font-weight: 600;
 }
 .source-card:hover { background: var(--surface-2); }
 .card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-.card-id { font-weight: 700; }
+.card-id { font-weight: 700; overflow-wrap: anywhere; }
 .card-title { overflow-wrap: anywhere; }
 .card-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-muted); font-size: 0.875rem; }
+.card-meta > span { min-width: 0; overflow-wrap: anywhere; }
 .score { font-variant-numeric: tabular-nums; }
 .cited-marker {
   padding: 0 6px;
@@ -435,7 +437,8 @@ label { display: block; margin-bottom: 2px; font-size: 0.9rem; font-weight: 600;
   border-radius: 6px;
   font-size: 0.8rem;
   font-weight: 600;
-  white-space: nowrap;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .badge-p1 { background: var(--p1-bg); color: var(--p1-fg); border-color: var(--p1-border); }
 .badge-p2 { background: var(--p2-bg); color: var(--p2-fg); border-color: var(--p2-border); }
