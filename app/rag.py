@@ -118,7 +118,7 @@ def _hit(ticket_id, document, metadata, similarity=None):
 
 
 def _exact_lookup(ops_ids, other_ids):
-    """Fetch tickets by id (OPS-n) or by text contained in the stored document (PO-n, INV-n).
+    """Fetch tickets by id (OPS-n) or by the whole id as a token in the stored document (PO-n, INV-n).
 
     Returns (hits, missing): hits in reference order, missing = references with no ticket.
     """
@@ -141,8 +141,12 @@ def _exact_lookup(ops_ids, other_ids):
                 missing.append(ref)
     for ref in other_ids:
         found = collection.get(where_document={"$contains": ref}, include=["documents", "metadatas"])
-        if found["ids"]:
-            add(found["ids"], found["documents"], found["metadatas"])
+        # $contains is a substring test (PO-1 also matches PO-12): keep the documents that hold the id as a whole token.
+        # No limit above, so nothing real can be crowded out; the cap on the result comes later (exact[:k]).
+        whole = re.compile(rf"\b{re.escape(ref)}\b")
+        keep = [i for i, document in enumerate(found["documents"]) if whole.search(document)]
+        if keep:
+            add([found["ids"][i] for i in keep], [found["documents"][i] for i in keep], [found["metadatas"][i] for i in keep])
         else:
             missing.append(ref)
     return hits, missing

@@ -1,14 +1,11 @@
 """Security headers: every response except the interactive API docs carries them.
 
-Runs the real app (real startup, real retrieval) against a COPY of chroma_db, never the original: the copy is made when
-this file is imported and CHROMA_DIR points at it. The language model is stubbed (llm.generate_answer), the API key is
-forced empty, and nothing is sent to Gemini. The test needs chroma_db/, data/tickets.json and the local embedding model
-(HF_HUB_OFFLINE=1, so it never downloads).
+Runs the real app (real startup, real retrieval) against a COPY of chroma_db, never the original: tests/conftest.py makes
+the copy before any test module is imported and points CHROMA_DIR at it. The language model is stubbed
+(llm.generate_answer), the API key is forced empty, and nothing is sent to Gemini. The test needs chroma_db/,
+data/tickets.json and the local embedding model (HF_HUB_OFFLINE=1, so it never downloads).
 """
-import atexit
 import os
-import shutil
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -17,13 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if not (ROOT / "chroma_db").is_dir():
     pytest.skip("chroma_db/ is missing: run python scripts/ingest.py first", allow_module_level=True)
 
-# Must happen before app.config is imported: it reads these variables once.
-_COPY_DIR = Path(tempfile.mkdtemp(prefix="ops-rag-chroma-copy-"))
-atexit.register(shutil.rmtree, _COPY_DIR, ignore_errors=True)
-shutil.copytree(ROOT / "chroma_db", _COPY_DIR / "chroma_db")
-os.environ["CHROMA_DIR"] = str(_COPY_DIR / "chroma_db")
-os.environ["GEMINI_API_KEY"] = ""  # the stub below is the only "model"; an empty key makes a real call impossible
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
+_COPY_DIR = Path(os.environ["CHROMA_DIR"]).parent  # the copy made by tests/conftest.py
 
 from fastapi.testclient import TestClient  # noqa: E402
 
