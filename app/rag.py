@@ -68,6 +68,13 @@ def _refs(text):
     return ops, other
 
 
+def _normalise_ids(ids):
+    """Cited ids as upper-case text without surrounding spaces and brackets. A blank entry is no id and is dropped here,
+    before the duplicates are removed and before the retrieved-set check."""
+    cleaned = (i.strip().strip("[]").upper() for i in ids)
+    return [i for i in cleaned if i.strip()]
+
+
 def _body_words(document):
     """Words of a stored ticket document without its first line (the header: id, category, priority, status)."""
     return set(WORD_RE.findall(" ".join(document.split("\n")[1:]).lower()))
@@ -237,8 +244,8 @@ def answer_question(question, filters=None, k=6, history=None):
     reply = llm.generate_answer(SYSTEM_PROMPT, build_prompt(question, context, history, ticket_records()))
 
     in_context = {hit["ticket_id"] for hit in context}
-    cited_by_model = [c.strip().strip("[]").upper() for c in reply.citations]
-    in_text = [m.upper() for m in BRACKET_ID_RE.findall(reply.answer)]
+    cited_by_model = _normalise_ids(reply.citations)
+    in_text = _normalise_ids(BRACKET_ID_RE.findall(reply.answer))
     citations = list(dict.fromkeys(c for c in cited_by_model if c in in_context)) if reply.found else []
     unverified = list(dict.fromkeys(c for c in cited_by_model + in_text if c not in in_context))
 
