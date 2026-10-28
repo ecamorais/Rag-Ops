@@ -28,11 +28,13 @@ class Filters(_Request):
     date_from: str | None = None
     date_to: str | None = None
 
-    @field_validator("date_from", "date_to")
+    @field_validator("date_from", "date_to", mode="before")
     @classmethod
     def _real_date(cls, value):
-        if value is None:
-            return value
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        if not isinstance(value, str):
+            raise ValueError("must be a date in YYYY-MM-DD format")
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
             raise ValueError("must be a date in YYYY-MM-DD format")
         try:
