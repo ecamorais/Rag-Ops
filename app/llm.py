@@ -22,6 +22,7 @@ BASE_DELAY = 2.0  # seconds; doubles each retry (2, 4, 8) plus jitter; used for 
 BACKOFF_503 = (5.0, 15.0, 45.0)  # 503 (overloaded) clears slowly, so wait longer; one value per retry
 MAX_WAIT = 60.0  # never sleep longer than this, even if the server asks for more
 QUOTA_USED_UP_AFTER = 120.0  # a 429 retry delay above this means the quota is used up: do not retry
+MAX_HINT = 86400.0  # a wait hint from the server counts for at most one day (same meaning as MAX_RETRY_AFTER in main.py; llm cannot import main)
 REQUEST_TIMEOUT_MS = 60_000
 
 # Every HTTP attempt sent to Gemini, and how many of them were retries after 429/503.
@@ -107,8 +108,11 @@ def _code_status(error):
 
 
 def _usable_wait(seconds):
-    """A wait time from the server only counts when it is a finite number of seconds, zero or more. Else it is no hint."""
-    return seconds if math.isfinite(seconds) and seconds >= 0 else None
+    """A wait time from the server. Rejects a value that is not finite or is negative (no hint: None). Any other value is capped
+    at MAX_HINT (one day), so the remembered reset time and the 'about N hours' text cannot become absurd."""
+    if not math.isfinite(seconds) or seconds < 0:
+        return None
+    return min(seconds, MAX_HINT)
 
 
 def _retry_hint(error):

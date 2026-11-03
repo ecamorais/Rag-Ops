@@ -224,13 +224,13 @@ def test_a_retry_delay_of_120_seconds_or_less_is_retried_and_does_not_arm_the_gu
     assert ask().found is True and len(follow_up.calls) == 1
 
 
-@pytest.mark.parametrize("seconds", [120.001, 120.5, 121, 300, 100000])
-def test_a_retry_delay_above_120_seconds_arms_the_guard_and_is_not_retried(use_client, waits, seconds):
+@pytest.mark.parametrize("seconds, remembered", [(120.001, 120.001), (120.5, 120.5), (121, 121), (300, 300), (100000, 86400)])
+def test_a_retry_delay_above_120_seconds_arms_the_guard_and_is_not_retried(use_client, waits, seconds, remembered):
     client = use_client(repeat=used_up(seconds))
     with pytest.raises(llm.RateLimitError):
         ask()
     assert len(client.calls) == 1 and waits.sleeps == []
-    assert llm._quota_resets == {MODEL: pytest.approx(T0 + seconds)}
+    assert llm._quota_resets == {MODEL: pytest.approx(T0 + remembered)}
 
 
 def test_a_retry_after_header_is_read_like_the_body_delay_for_the_threshold(use_client, waits):
@@ -446,12 +446,24 @@ def test_the_retry_after_is_at_most_one_day_in_the_first_answer(api_client, use_
     assert chat(api_client).headers["retry-after"] == expected
 
 
-def test_the_cap_applies_to_the_remaining_time_and_falls_away_below_a_day(api_client, use_client, clock):
-    arm(use_client, 200000)
-    for passed, expected in ((0, "86400"), (100000, "86400"), (113600, "86400"), (150000, "50000")):
+@pytest.mark.parametrize("seconds, expected", [(86399, "86399"), (86400, "86400"), (86400.5, "86400"), (200000, "86400"), (1e12, "86400")])
+def test_main_caps_the_retry_after_at_one_day_whatever_the_error_carries(api_client, stub_model, seconds, expected):
+    """main.py:33 and CLAUDE.md:109: "at most one day". Since llm.py clamps every hint to a day, a real Gemini error can no longer reach main.py with
+    more; this error is raised by the stub, so it does not pass through llm.py, and main.py's own cap is what is tested."""
+    stub_model.fail(llm.RateLimitError("x", retry_after_seconds=seconds))
+    response = chat(api_client)
+    assert response.status_code == 429 and response.headers["retry-after"] == expected
+
+
+def test_a_hint_above_a_day_is_remembered_for_one_day_and_the_retry_after_counts_down_from_it(api_client, use_client, clock):
+    arm(use_client, 200000)  # remembered until T0 + 86400, not T0 + 200000
+    for passed, expected in ((0, "86400"), (50000, "36400"), (86399, "1"), (86399.5, "1")):
         clock.now = T0 + passed
         response = chat(api_client)
         assert response.status_code == 429 and response.headers["retry-after"] == expected, passed
+    clock.now = T0 + 86400  # the day is over: the question goes to Gemini again
+    follow_up = use_client(reply(OK_TEXT))
+    assert chat(api_client).status_code == 200 and len(follow_up.calls) == 1 and llm._quota_resets == {}
 
 
 @pytest.mark.parametrize("seconds, expected", [(0.2, "1"), (-3, "1")], ids=["0.2", "negative"])
@@ -686,7 +698,7 @@ def test_threads_the_lock_is_free_while_a_request_sleeps_before_its_retry(monkey
 # An infinite, not-a-number or negative hint is treated as no hint, so the normal backoff applies: llm.py:20-21 (BASE_DELAY doubles: 2, 4, 8;
 # BACKOFF_503 = 5, 15, 45) and MAX_ATTEMPTS = 4 (llm.py:19). Before the fix a 429 with an infinite hint armed the guard with "inf" and escaped as
 # an OverflowError, and every later model question was a 500 until a restart; nan, -inf and negative hints made time.sleep raise ValueError.
-# Huge FINITE hints (1e12 and up) are NOT covered here: they belong to the separate clamp step.
+# Huge FINITE hints (above one day) are covered in the section below.
 # =====================================================================================================================================
 
 BAD_HINTS = ["inf", "-inf", "nan", "-5", "1e999"]
@@ -802,3 +814,120 @@ def test_a_bad_body_entry_and_a_bad_header_are_no_hint():
 def test_pinned_a_good_body_entry_still_wins_over_the_header():
     error = api_error(429, status="RESOURCE_EXHAUSTED", details=[{"retryDelay": "30s"}], response=httpx.Response(429, headers={"retry-after": "45"}))
     assert llm._retry_hint(error) == 30.0
+
+
+# =====================================================================================================================================
+# A server hint above one day is remembered for one day
+# The rule (decided at the clamp step; llm.MAX_HINT, llm._usable_wait): a wait hint from the server counts for at most one day (86400 s, the same
+# limit as main.py MAX_RETRY_AFTER: "Retry-After on a 429 is capped at one day"; CLAUDE.md:109 "at most one day"). So a quota reset is remembered
+# for at most one day, and the "about N hours" text never says more than "about 24 hours". Before the clamp a hint of 1e12 armed the guard for
+# thousands of years and 1e300 put a number of about 300 digits into the error text.
+# =====================================================================================================================================
+
+HUGE = ["86400.5", "200000", "1e12", "1e18", "1e300"]
+DAY = 86400.0
+
+
+@pytest.mark.parametrize("form", FORMS)
+@pytest.mark.parametrize("hint", HUGE)
+def test_a_huge_hint_arms_the_guard_for_exactly_one_day(use_client, waits, form, hint):
+    client = use_client(repeat=hinted(429, form, hint))
+    with pytest.raises(llm.RateLimitError) as caught:
+        ask()
+    assert len(client.calls) == 1 and waits.sleeps == []
+    assert llm._quota_resets == {MODEL: T0 + DAY}
+    assert caught.value.retry_after_seconds == DAY and "used up" in str(caught.value)
+
+
+@pytest.mark.parametrize("form", FORMS)
+@pytest.mark.parametrize("hint", HUGE)
+def test_the_message_for_a_huge_hint_says_about_24_hours(use_client, form, hint):
+    use_client(repeat=hinted(429, form, hint))
+    with pytest.raises(llm.RateLimitError) as caught:
+        ask()
+    assert "about 24 hours" in str(caught.value) and len(str(caught.value)) < 200
+
+
+@pytest.mark.parametrize("form", FORMS)
+@pytest.mark.parametrize("hint", HUGE)
+def test_through_the_api_a_huge_hint_gives_429_with_retry_after_86400(api_client, use_client, form, hint):
+    client = use_client(repeat=hinted(429, form, hint))
+    response = chat(api_client)
+    assert len(client.calls) == 1
+    assert response.status_code == 429 and response.json()["code"] == "rate_limited" and set(response.json()) == {"error", "code"}
+    assert response.headers["retry-after"] == "86400" and "about 24 hours" in response.json()["error"]
+
+
+@pytest.mark.parametrize("form", FORMS)
+@pytest.mark.parametrize("hint", HUGE)
+def test_the_guard_ends_one_day_after_a_huge_hint(use_client, clock, form, hint):
+    first = use_client(repeat=hinted(429, form, hint))
+    with pytest.raises(llm.RateLimitError):
+        ask()
+    clock.now = T0 + 86399
+    with pytest.raises(llm.RateLimitError):
+        ask()
+    assert len(first.calls) == 1  # refused without any Gemini request
+    clock.now = T0 + 86400
+    second = use_client(reply(OK_TEXT))
+    assert ask().found is True and len(second.calls) == 1 and llm._quota_resets == {}
+
+
+def test_the_refusal_text_counts_down_from_a_day(use_client, clock):
+    use_client(repeat=hinted(429, "body", "1e12"))
+    with pytest.raises(llm.RateLimitError):
+        ask()
+    clock.now = T0 + 1000
+    with pytest.raises(llm.RateLimitError) as early:
+        ask()
+    assert early.value.retry_after_seconds == pytest.approx(85400.0) and "about 24 hours" in str(early.value)
+    clock.now = T0 + 82800
+    with pytest.raises(llm.RateLimitError) as late:
+        ask()
+    assert late.value.retry_after_seconds == pytest.approx(3600.0) and "about 1 hour" in str(late.value)
+
+
+@pytest.mark.parametrize("form", FORMS)
+@pytest.mark.parametrize("hint", ["86399", "86400"])
+def test_a_hint_of_exactly_a_day_or_just_below_is_unchanged(use_client, form, hint):
+    use_client(repeat=hinted(429, form, hint))
+    with pytest.raises(llm.RateLimitError) as caught:
+        ask()
+    assert llm._quota_resets == {MODEL: T0 + float(hint)} and caught.value.retry_after_seconds == float(hint)
+
+
+@pytest.mark.parametrize("form", FORMS)
+@pytest.mark.parametrize("hint", HUGE)
+def test_a_503_with_a_huge_hint_is_retried_with_the_60_second_cap_and_arms_nothing(use_client, waits, form, hint):
+    client = use_client(repeat=hinted(503, form, hint))
+    with pytest.raises(llm.ServerError):
+        ask()
+    assert len(client.calls) == 4 and waits.sleeps == [60.0, 60.0, 60.0] and llm._quota_resets == {}
+
+
+@pytest.mark.parametrize("form", FORMS)
+def test_a_429_with_a_hint_of_120_is_not_affected_by_the_cap(use_client, waits, form):
+    client = use_client(repeat=hinted(429, form, "120"))
+    with pytest.raises(llm.RateLimitError):
+        ask()
+    assert len(client.calls) == 4 and waits.sleeps == [60.0, 60.0, 60.0] and llm._quota_resets == {}
+
+
+def test_pinned_a_zero_quota_429_with_a_huge_hint_is_armed_for_one_day(use_client):
+    """Same as the existing zero-quota case with a long hint: the zero-quota message is kept and the hint is still remembered, now for a day."""
+    error = api_error(429, message="Quota exceeded, limit: 0", status="RESOURCE_EXHAUSTED", details=[{"retryDelay": "1e12s"}])
+    use_client(repeat=error)
+    with pytest.raises(llm.RateLimitError) as caught:
+        ask()
+    assert "zero" in str(caught.value) and llm._quota_resets == {MODEL: T0 + DAY}
+
+
+@pytest.mark.parametrize("seconds, expected", [(0, 0.0), (5, 5.0), (86400, 86400.0), (86400.5, 86400.0), (1e12, 86400.0), (1e300, 86400.0),
+                                               (float("inf"), None), (float("-inf"), None), (float("nan"), None), (-1, None), (-0.001, None)])
+def test_usable_wait_directly(seconds, expected):
+    assert llm._usable_wait(seconds) == expected
+
+
+def test_pinned_a_huge_body_entry_wins_over_a_later_good_entry_and_is_capped():
+    error = api_error(429, status="RESOURCE_EXHAUSTED", details=[{"retryDelay": "1e12s"}, {"retryDelay": "30s"}])
+    assert llm._retry_hint(error) == DAY
