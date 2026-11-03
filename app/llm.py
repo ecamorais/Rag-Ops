@@ -4,6 +4,7 @@ Error messages are our own text plus the HTTP code and status only. Exception te
 headers and the client object are never logged or shown, because they could hold the key.
 """
 
+import math
 import random
 import re
 import threading
@@ -105,6 +106,11 @@ def _code_status(error):
     return f"HTTP {error.code} {error.status or ''}".strip()
 
 
+def _usable_wait(seconds):
+    """A wait time from the server only counts when it is a finite number of seconds, zero or more. Else it is no hint."""
+    return seconds if math.isfinite(seconds) and seconds >= 0 else None
+
+
 def _retry_hint(error):
     """Seconds the server asked us to wait (RetryInfo in the body, or Retry-After), else None."""
     try:
@@ -113,13 +119,15 @@ def _retry_hint(error):
             for item in details.get("error", details).get("details", []) or []:
                 delay = item.get("retryDelay") if isinstance(item, dict) else None
                 if delay:
-                    return float(str(delay).rstrip("s"))
+                    seconds = _usable_wait(float(str(delay).rstrip("s")))
+                    if seconds is not None:
+                        return seconds
     except (AttributeError, TypeError, ValueError):
         pass
     try:
         value = error.response.headers.get("retry-after")
         if value:
-            return float(value)
+            return _usable_wait(float(value))
     except (AttributeError, TypeError, ValueError):
         pass
     return None
