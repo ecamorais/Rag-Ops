@@ -249,7 +249,7 @@ def generate_answer(system, prompt):
                 wait = hint
                 if wait is None:
                     wait = BACKOFF_503[attempt - 1] if error.code == 503 else BASE_DELAY * 2 ** (attempt - 1)
-                wait = min(wait, MAX_WAIT) + random.uniform(0, 1)
+                wait = min(wait + random.uniform(0, 1), MAX_WAIT)
             except httpx.TransportError as error:
                 if attempt == MAX_ATTEMPTS:
                     raise NetworkError(
