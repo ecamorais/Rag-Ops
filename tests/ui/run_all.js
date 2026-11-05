@@ -7,7 +7,7 @@ const { spawnSync } = require("child_process");
 
 const ROOT = path.join(__dirname, "..", "..");
 const TIMEOUT_MS = 120000;
-const SUITES = [["test_pure.js", 116], ["test_dom.js", 38], ["test_inert.js", 9], ["test_chat.js", 47], ["test_drawer.js", 27]];
+const SUITES = [["test_pure.js", 116], ["test_dom.js", 38], ["test_inert.js", 10], ["test_chat.js", 47], ["test_drawer.js", 27]];
 const appArgs = process.env.OPS_APP_JS ? [process.env.OPS_APP_JS] : [];
 
 let total = 0, expectedTotal = 0, problems = 0;

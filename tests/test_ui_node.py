@@ -16,7 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 UI_DIR = ROOT / "tests" / "ui"
 NODE = shutil.which("node")
-SUITES = [("test_pure.js", 116), ("test_dom.js", 38), ("test_inert.js", 9), ("test_chat.js", 47), ("test_drawer.js", 27)]
+SUITES = [("test_pure.js", 116), ("test_dom.js", 38), ("test_inert.js", 10), ("test_chat.js", 47), ("test_drawer.js", 27)]
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node is not installed; the UI suites in tests/ui need Node.js (tested with v26.8.1)")
 

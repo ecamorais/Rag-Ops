@@ -16,7 +16,8 @@ Phase 3 status (RAG core, CLI only):
 
 Phase 6 status (tests and evaluation, as of 2026-11-05):
 - Python tests: 11 files, 1,350 collected (1,345 Python tests + 5 wrapper tests that run the Node suites); the last full run gave 1349 passed, 1 skipped. Per-file counts are in the Tests section below.
-- Front-end tests: 237 Node tests in `tests/ui` (fake DOM, not a browser), run by `tests/test_ui_node.py` or `node tests/ui/run_all.js`; Node v26.8.1 is the only version tested.
+- Front-end tests: 238 Node tests in `tests/ui` (fake DOM, not a browser), run by `tests/test_ui_node.py` or `node tests/ui/run_all.js`; Node v26.8.1 is the only version tested.
+- "New chat" moved from the filter sidebar into the header (same id and behaviour) on 2026-11-05; `tests/ui/test_inert.js` now has 10 tests (one checks the placement).
 - Golden set: 33 questions in `tests/golden_questions.json`, frozen on 2026-10-27, pinned by a sha256 in `tests/test_golden_labels.py` (`PIN_HISTORY`; every accepted edit needs one entry in `meta.changes_after_scores`).
 - Evaluation: `python scripts/evaluate.py` (retrieval only, stub model); results in `docs/evaluation.md`. It says nothing about answer quality or citation correctness.
 - Break controls: the Node tests have 107 mutations in `tests/ui/breaks` (kept in the repository). The Python test files were break-tested on temporary copies; those scripts are NOT kept.
@@ -115,7 +116,7 @@ uvicorn app.main:app --port 8000 --no-access-log     # the app logs its own one 
 # Run tests. The Python tests need chroma_db/, data/tickets.json and the local embedding model; they work on a temp copy of chroma_db,
 # stub the model and never call Gemini. pytest also runs the 5 Node wrapper tests (skipped with a reason when node is missing).
 pytest
-node tests/ui/run_all.js                    # the 237 front-end tests alone (Node, no packages; tested with v26.8.1 only)
+node tests/ui/run_all.js                    # the 238 front-end tests alone (Node, no packages; tested with v26.8.1 only)
 node tests/ui/breaks/mutate_chat.js         # mutation checks of one suite (also mutate_pure/dom/inert/drawer); temp copies only
 
 # Retrieval-only evaluation (stub model, no Gemini call, no key; needs the index). Prints the report on stdout;
@@ -157,7 +158,7 @@ normal `detail` list. A body with a lone surrogate (JSON `"\ud800"`) or a non-fi
 ## Chat UI
 Files in `static/`, served at `/` by the static mount: `index.html`, `style.css`, `app.js`, `favicon.svg`. Plain HTML, CSS and JS: no build step, no framework, no external requests, no inline script or style, no `innerHTML` (everything that comes from the API is shown as text). The Content-Security-Policy (see the API section) enforces this in the browser.
 - Features: chat thread with markdown-lite answers; ticket chips only for tickets that were retrieved (other ids are shown as muted text with a marker); a callout for references that were not found; sources with cited tickets first; a ticket drawer (native modal `<dialog>`) fed by `GET /tickets/{id}`; sidebar filters (category, priority, status, team, dates, results per question) that are sent with each question; follow-up history (last 12 messages, only after a successful answer); one request at a time with a 150 s timeout; errors as an inline bubble with Retry and, for a 429, a countdown from `Retry-After`; New chat; light and dark theme; a slide-over filter panel on narrow screens (header and page are inert while it is open); skip link.
-- Tested: the pure functions and the DOM logic with the Node suites in `tests/ui` (237 tests on a fake DOM), each with deliberate-break controls (107 mutations in `tests/ui/breaks`); and in headless Edge 155 on 2026-10-27 against a stub server (real retrieval on a COPY of `chroma_db`, stubbed model, in-memory hostile ticket): about 140 checks covering first load, filters, every answer kind, the drawer, 429 (countdown, `Retry-After`), 503, offline and slow replies, New chat, history, hostile text in answers and tickets, narrow screens (390 and 360 px), dark mode, keyboard operation, and the CSP (0 violations, positive and negative controls, framing refused). Every screenshot was looked at.
+- Tested: the pure functions and the DOM logic with the Node suites in `tests/ui` (238 tests on a fake DOM), each with deliberate-break controls (107 mutations in `tests/ui/breaks`); and in headless Edge 155 on 2026-10-27 against a stub server (real retrieval on a COPY of `chroma_db`, stubbed model, in-memory hostile ticket): about 140 checks covering first load, filters, every answer kind, the drawer, 429 (countdown, `Retry-After`), 503, offline and slow replies, New chat, history, hostile text in answers and tickets, narrow screens (390 and 360 px), dark mode, keyboard operation, and the CSP (0 violations, positive and negative controls, framing refused). Every screenshot was looked at.
 - The Node suites are in the repository (`tests/ui`) and run under `pytest` through `tests/test_ui_node.py` (skipped with a reason when `node` is missing). The headless-Edge browser harness lives only in a scratch folder outside the repository.
 - NOT verified:
   - The UI with real Gemini answers after the prompt, follow-up retrieval and details-line changes. The browser run used stub answers; the real calls on 2026-10-26 and 2026-10-27 went through the CLI and the API code path, not the UI. The newest system-prompt rule (who performed an action) and a real 429 against the quota guard are still untested.
@@ -184,7 +185,7 @@ Files in `static/`, served at `/` by the static mount: `index.html`, `style.css`
 | `tests/test_ui_node.py` (wrapper, see below) | 5 |
 | **Collected** | **1,350** |
 
-- Python tests: 1,345. The other 5 are wrapper tests, one per Node suite. The 237 Node tests (116 pure functions, 38 DOM, 9 inert panel, 47 chat, 27 drawer) run inside those 5 and are not counted by pytest.
+- Python tests: 1,345. The other 5 are wrapper tests, one per Node suite. The 238 Node tests (116 pure functions, 38 DOM, 10 inert panel, 47 chat, 27 drawer) run inside those 5 and are not counted by pytest.
 - Last full `pytest` run: 1349 passed, 1 skipped. The skip is in `test_exact_lookup.py`: a test with nothing to check in this data set (no PO or INV id appears only in comments).
 - No test calls Gemini: `tests/conftest.py` stubs the model, sets an empty key and fails any test that creates a real client. The Python tests run on a temp COPY of `chroma_db/` (prefix `oh`, short on purpose because of the Windows path limit).
 - Tests named `pinned_*` record UNWRITTEN behaviour (no rule says what should happen). In `test_prompt_escaping.py` and the non-finite-number tests each one names its finding. A strict `xfail` that unexpectedly passes counts as a failure.

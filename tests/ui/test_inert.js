@@ -35,6 +35,14 @@ test("the page has ids for the header and the main area, and the sidebar is insi
   assert(inside(els.appHeader, els.sidebarToggle) && inside(els.appHeader, els.themeToggle));
   assert(inside(els.mainArea, doc.getElementById("thread")) && inside(els.mainArea, doc.getElementById("question")));
 });
+test("New chat is a button in the header, and not inside the sidebar or its filters form", async () => {
+  const { doc, els } = await boot();
+  const inside = (outer, inner) => { for (let p = inner; p; p = p.parentNode) if (p === outer) return true; return false; };
+  assert(els.newChat, "the page has #new-chat");
+  assert.strictEqual(els.newChat.tagName, "BUTTON");
+  assert(inside(els.appHeader, els.newChat), "New chat is inside the header");
+  assert(!inside(els.sidebar, els.newChat) && !inside(doc.getElementById("filters-form"), els.newChat), "New chat is not in the sidebar");
+});
 test("closed at start: nothing is inert", async () => {
   const { els } = await boot();
   assert.deepStrictEqual([els.appHeader.hasAttribute("inert"), els.mainArea.hasAttribute("inert")], [false, false]);
