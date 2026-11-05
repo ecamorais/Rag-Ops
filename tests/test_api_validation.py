@@ -524,16 +524,138 @@ def test_the_422_for_any_other_invalid_input_is_byte_identical_to_fastapis_defau
     assert stub_model.calls == []
 
 
-# FINDING F10 (found while probing this section): a non-finite number in the body (NaN, Infinity, -Infinity, or 1e999, which Python reads as
-# infinity) is not a lone surrogate but fails in the same place: the 422 body echoes the number and Starlette's JSONResponse refuses it
-# (allow_nan=False, ValueError), so the answer is a 500 instead of the 422 the rule above asks for. Written as xfail(strict=True): the expected
-# value comes from the rule, and when the code is fixed the marker must be removed. NOT fixed in this step.
+# A non-finite number in the body (NaN, Infinity, -Infinity, or 1e999, which Python reads as infinity). Finding F10, fixed: the 422 body echoes the
+# number, JSON cannot hold it and Starlette's JSONResponse refuses it (allow_nan=False, ValueError), which used to answer a 500 instead of the
+# 422 the rule above asks for. The expected values come from the rule (422, detail list, valid JSON); the echoed strings are pinned_.
 
-@pytest.mark.xfail(strict=True, reason="finding F10: a NaN or Infinity number in the body gives a 500 instead of a 422")
-@pytest.mark.parametrize("route, content", [
-    ("/chat", b'{"question": "q", "k": NaN}'), ("/chat", b'{"question": "q", "k": Infinity}'), ("/search", b'{"query": "q", "k": -Infinity}'),
-    ("/chat", b'{"question": "q", "k": 1e999}'), ("/chat", b'{"question": "q", "filters": {"category": NaN}}'), ("/chat", b'{"question": NaN}'),
-    ("/chat", b'{"question": "q", "history": [{"role": "user", "content": Infinity}]}'),
-], ids=["k NaN", "k Infinity", "k -Infinity", "k 1e999", "filter NaN", "question NaN", "history content Infinity"])
-def test_a_non_finite_number_in_the_body_is_a_422_with_the_detail_list(api_client, stub_model, route, content):
-    assert_rejected(raw(api_client, route, content), stub_model)
+def strict_json(text):
+    """Parses like a strict JSON reader: a bare NaN, Infinity or -Infinity is an error."""
+    def refuse(constant):
+        raise ValueError("not valid JSON: bare " + constant)
+
+    return json.loads(text, parse_constant=refuse)
+
+
+NONFINITE_CASES = [  # (id, route, body, expected loc, expected echoed input)
+    ("k NaN", "/chat", b'{"question": "q", "k": NaN}', ["body", "k"], "NaN"),
+    ("k Infinity", "/chat", b'{"question": "q", "k": Infinity}', ["body", "k"], "Infinity"),
+    ("k -Infinity", "/search", b'{"query": "q", "k": -Infinity}', ["body", "k"], "-Infinity"),
+    ("k 1e999", "/chat", b'{"question": "q", "k": 1e999}', ["body", "k"], "Infinity"),
+    ("filter NaN", "/chat", b'{"question": "q", "filters": {"category": NaN}}', ["body", "filters", "category"], "NaN"),
+    ("question NaN", "/chat", b'{"question": NaN}', ["body", "question"], "NaN"),
+    ("history content Infinity", "/chat", b'{"question": "q", "history": [{"role": "user", "content": Infinity}]}',
+     ["body", "history", 0, "content"], "Infinity"),
+    ("history extra field NaN", "/chat", b'{"question": "q", "history": [{"role": "user", "content": "x", "extra": NaN}]}',
+     ["body", "history", 0, "extra"], "NaN"),
+    ("extra field -Infinity", "/search", b'{"query": "q", "x": -Infinity}', ["body", "x"], "-Infinity"),
+    ("question is a list with NaN", "/chat", b'{"question": [1, [NaN, -Infinity], {"a": Infinity}]}', ["body", "question"],
+     [1, ["NaN", "-Infinity"], {"a": "Infinity"}]),
+    ("question is a dict with NaN", "/chat", b'{"question": {"a": {"b": [NaN, 1e999]}}}', ["body", "question"], {"a": {"b": ["NaN", "Infinity"]}}),
+    ("filters is a list of dicts with NaN", "/chat", b'{"question": "q", "filters": [{"x": [NaN]}]}', ["body", "filters"], [{"x": ["NaN"]}]),
+    ("deep list with NaN inside", "/chat", ('{"question": ' + "[" * 300 + "NaN" + "]" * 300 + "}").encode("ascii"), ["body", "question"], None),
+    ("bare NaN body", "/chat", b"NaN", ["body"], "NaN"),
+    ("bare -Infinity body", "/search", b"-Infinity", ["body"], "-Infinity"),
+]
+NONFINITE_IDS = [case[0] for case in NONFINITE_CASES]
+NONFINITE_VALUE_CASES = [case for case in NONFINITE_CASES if case[4] is not None]
+
+
+@pytest.mark.parametrize("name, route, content, loc, echoed", NONFINITE_CASES, ids=NONFINITE_IDS)
+def test_a_non_finite_number_in_the_body_is_a_422_with_the_detail_list(api_client, stub_model, name, route, content, loc, echoed):
+    response = raw(api_client, route, content)
+    assert_rejected(response, stub_model, loc)
+    assert response.headers["content-type"].startswith("application/json")
+    payload = strict_json(response.text)  # valid JSON for a strict reader: no bare NaN or Infinity
+    assert set(payload) == {"detail"}
+    assert all({"type", "loc", "msg"} <= set(entry) for entry in payload["detail"])
+    assert_no_real_client()
+
+
+@pytest.mark.parametrize("name, route, content, loc, echoed", NONFINITE_CASES, ids=NONFINITE_IDS)
+def test_the_422_for_a_non_finite_number_carries_the_security_headers(api_client, stub_model, name, route, content, loc, echoed):
+    response = raw(api_client, route, content)
+    assert response.status_code == 422
+    for header in SECURITY_HEADERS:
+        assert header in response.headers, header
+    assert response.headers["x-content-type-options"] == "nosniff" and response.headers["referrer-policy"] == "no-referrer"
+    assert stub_model.calls == []
+
+
+@pytest.mark.parametrize("name, route, content, loc, echoed", NONFINITE_VALUE_CASES, ids=[case[0] for case in NONFINITE_VALUE_CASES])
+def test_pinned_a_non_finite_number_is_echoed_as_its_name_in_a_string(api_client, stub_model, name, route, content, loc, echoed):
+    """Unwritten behaviour, not a deviation (finding F10): JSON has no NaN or Infinity, so the echoed input carries the strings "NaN", "Infinity"
+    and "-Infinity" (at any depth), and the sign is kept. 1e999 is read as infinity before the app sees it, so it is echoed as "Infinity"."""
+    payload = strict_json(raw(api_client, route, content).text)
+    assert any(entry["loc"] == loc and entry["input"] == echoed for entry in payload["detail"]), payload
+
+
+def test_pinned_a_nested_non_finite_number_is_a_string_at_every_depth(api_client, stub_model):
+    """Unwritten behaviour, not a deviation (finding F10). Only the innermost value changes; the structure around it is kept."""
+    payload = strict_json(raw(api_client, "/chat", ('{"question": ' + "[" * 300 + "NaN" + "]" * 300 + "}").encode("ascii")).text)
+    value = payload["detail"][0]["input"]
+    for _ in range(300):
+        assert isinstance(value, list) and len(value) == 1
+        value = value[0]
+    assert value == "NaN"
+
+
+@pytest.mark.parametrize("text, loc", [
+    (r'{"question": "a\ud800", "k": NaN}', [["body", "question"], ["body", "k"]]),
+    (r'{"question": ["\ud800", NaN]}', [["body", "question"]]),
+    (r'{"question": "q", "filters": {"category": "\ud800", "team": NaN}}', [["body", "filters", "category"], ["body", "filters", "team"]]),
+], ids=["two fields", "one list", "two filters"])
+def test_a_lone_surrogate_and_a_non_finite_number_in_one_request_are_one_422(api_client, stub_model, text, loc):
+    response = send_surrogate(api_client, "/chat", text)
+    assert_rejected(response, stub_model)
+    assert response.headers["content-type"].startswith("application/json")
+    payload = strict_json(response.text)
+    assert set(payload) == {"detail"}
+    for expected in loc:
+        assert any(entry["loc"] == expected for entry in payload["detail"]), (expected, payload)
+    response.content.decode("ascii")  # the body is plain ASCII: the surrogate is an escape
+
+
+def test_a_4000_digit_integer_is_still_an_ordinary_422(api_client, stub_model):
+    response = raw(api_client, "/chat", b'{"question": "q", "k": ' + b"9" * 4000 + b"}")
+    assert_rejected(response, stub_model, ["body", "k"])
+    assert response.headers["content-type"].startswith("application/json")
+
+
+def test_pinned_a_5000_digit_integer_is_fastapis_own_400(api_client, stub_model):
+    """Unwritten behaviour, not a deviation: Python refuses to read an integer of more than 4300 digits, and FastAPI answers 400 itself
+    (the body cannot be parsed) before any validation. The handler for 422 is not involved."""
+    for content in (b'{"question": "q", "k": ' + b"9" * 5000 + b"}", b'{"question": [' + b"9" * 5000 + b"]}"):
+        response = raw(api_client, "/chat", content)
+        assert response.status_code == 400
+        assert set(response.json()) == {"error", "code"}
+    assert stub_model.calls == []
+
+
+def test_pinned_the_fallback_never_writes_a_bare_nan_even_if_the_sanitising_missed_one(api_client, stub_model, monkeypatch):
+    """Unwritten behaviour, not a deviation: the fallback body is written with allow_nan=False as a second guard. If the replacement of
+    non-finite numbers did nothing, the app answers its generic 500 and never a 422 whose body holds a bare NaN (which is not JSON)."""
+    from app import main
+
+    monkeypatch.setattr(main, "_finite", lambda value: value)
+    response = raw(api_client, "/chat", b'{"question": "q", "k": NaN}')
+    assert response.status_code == 500
+    assert response.json() == {"error": "Internal error", "code": "internal_error"}
+    assert stub_model.calls == []
+
+
+def test_pinned_only_a_value_error_is_swallowed_by_the_validation_handler(api_client, stub_model, monkeypatch):
+    """Unwritten behaviour, not a deviation. The handler falls back to the escaped body only for a ValueError (a lone surrogate, NaN or Infinity).
+    Any other error from the response class (here a TypeError) is not hidden: the app answers its generic 500 internal_error."""
+    from app import main
+
+    class Failing(main.JSONResponse):
+        def __init__(self, content=None, status_code=200, *args, **kwargs):
+            if status_code == 422:
+                raise TypeError("not a ValueError")
+            super().__init__(content, status_code, *args, **kwargs)
+
+    monkeypatch.setattr(main, "JSONResponse", Failing)
+    response = raw(api_client, "/chat", b'{"question": ""}')
+    assert response.status_code == 500
+    assert response.json() == {"error": "Internal error", "code": "internal_error"}
+    assert stub_model.calls == []

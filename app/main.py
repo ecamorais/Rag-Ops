@@ -180,15 +180,27 @@ async def http_error_handler(request: Request, error: StarletteHTTPException):
     return _error(error.status_code, str(error.detail), codes.get(error.status_code, "http_error"), error.headers)
 
 
+def _finite(value):
+    """The value with every NaN / Infinity float (at any depth) replaced by its name as a string, so that it is valid JSON."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return "NaN" if math.isnan(value) else "Infinity" if value > 0 else "-Infinity"
+    if isinstance(value, dict):
+        return {key: _finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_finite(item) for item in value]
+    return value
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, error: RequestValidationError):
-    # The same 422 body as FastAPI's own handler. Only when the echoed "input" holds a lone surrogate (JSON "\ud800"), which UTF-8 cannot
-    # encode, the body is written with ASCII escapes instead of failing with a 500.
+    # The same 422 body as FastAPI's own handler. The echoed "input" can make JSONResponse raise a ValueError in two cases: a lone surrogate
+    # (JSON "\ud800"; UnicodeEncodeError, which UTF-8 cannot encode) and NaN or Infinity (JSON NaN, Infinity, 1e999; allow_nan=False).
+    # Then the body is written with ASCII escapes and non-finite numbers as strings instead of failing with a 500.
     content = {"detail": jsonable_encoder(error.errors())}
     try:
         return JSONResponse(status_code=422, content=content)
-    except UnicodeEncodeError:
-        return Response(json.dumps(content, separators=(",", ":")), status_code=422, media_type="application/json")
+    except ValueError:
+        return Response(json.dumps(_finite(content), separators=(",", ":"), allow_nan=False), status_code=422, media_type="application/json")
 
 
 @app.get("/health", response_model=HealthResponse)
