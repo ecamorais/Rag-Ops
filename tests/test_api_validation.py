@@ -338,3 +338,202 @@ def test_pinned_a_422_echoes_the_input_it_rejected(api_client, stub_model):
 def test_pinned_a_null_history_is_the_same_as_none(api_client, stub_model):
     with_null = hit_ids(post(api_client, "/chat", body("/chat", history=None)))
     assert with_null == hit_ids(post(api_client, "/chat", body("/chat"))) == hit_ids(post(api_client, "/chat", body("/chat", history=[])))
+
+
+# =====================================================================================================================================
+# A lone surrogate in a request body
+# The rule: a request that fails validation is answered with 422 and FastAPI's {"detail": [...]} list (README.md "API", CLAUDE.md "API":
+# "a 422 from request validation uses FastAPI's usual `detail` list"). A JSON string such as "\ud800" (a lone UTF-16 surrogate) is not valid
+# text: pydantic rejects it, and the 422 body echoes the rejected input, which UTF-8 cannot encode. Before app/main.py got its
+# validation_error_handler every such request ended in a 500 {"error": "Internal error", "code": "internal_error"} instead of the 422.
+# The 422 body of every OTHER invalid input must stay exactly what FastAPI's own default handler returns: the expected bytes below are computed
+# by calling fastapi.exception_handlers.request_validation_exception_handler itself (on a small reference app with the same request models),
+# never from app/main.py. The surrogates are written as JSON escapes in raw strings, so no lone surrogate character is stored in this file.
+# =====================================================================================================================================
+
+SURROGATE_CASES = [  # (id, route, JSON text, the loc the bad value is reported at (None: no check), the rejected string as Python sees it)
+    ("question high", "/chat", r'{"question": "a\ud800b"}', ["body", "question"], "a\ud800b"),
+    ("question low", "/chat", r'{"question": "a\udc00b"}', ["body", "question"], "a\udc00b"),
+    ("search query", "/search", r'{"query": "a\ud800b"}', ["body", "query"], "a\ud800b"),
+    ("history content", "/chat", r'{"question": "q", "history": [{"role": "user", "content": "x\ud800y"}]}', ["body", "history", 0, "content"], "x\ud800y"),
+    ("history role", "/chat", r'{"question": "q", "history": [{"role": "x\ud800", "content": "y"}]}', ["body", "history", 0, "role"], "x\ud800"),
+    ("filters category", "/chat", r'{"question": "q", "filters": {"category": "\ud800"}}', ["body", "filters", "category"], "\ud800"),
+    ("filters team", "/search", r'{"query": "q", "filters": {"team": "a\ud800"}}', ["body", "filters", "team"], "a\ud800"),
+    ("filters status", "/chat", r'{"question": "q", "filters": {"status": "\udc00"}}', ["body", "filters", "status"], "\udc00"),
+    ("filters date_from", "/chat", r'{"question": "q", "filters": {"date_from": "\ud800"}}', ["body", "filters", "date_from"], "\ud800"),
+    ("filters date_to", "/search", r'{"query": "q", "filters": {"date_to": "2026-01-01\ud800"}}', ["body", "filters", "date_to"], "2026-01-01\ud800"),
+    ("field name on chat", "/chat", r'{"question": "q", "\ud800": 1}', None, None),
+    ("field name on search", "/search", r'{"query": "q", "\ud800": 1}', None, None),
+]
+SURROGATE_IDS = [case[0] for case in SURROGATE_CASES]
+SURROGATE_VALUE_CASES = [case for case in SURROGATE_CASES if case[4] is not None]
+
+
+def send_surrogate(client, route, text):
+    return raw(client, route, text.encode("ascii"))
+
+
+def assert_no_real_client():
+    from app import llm
+
+    assert llm._client is None  # conftest.py also fails the test if anything asked for a real client
+
+
+@pytest.mark.parametrize("name, route, text, loc, original", SURROGATE_CASES, ids=SURROGATE_IDS)
+def test_a_lone_surrogate_is_a_422_with_the_detail_list_and_never_reaches_the_model(api_client, stub_model, name, route, text, loc, original):
+    response = send_surrogate(api_client, route, text)
+    assert_rejected(response, stub_model, loc)
+    assert response.headers["content-type"].startswith("application/json")
+    payload = response.json()  # the body is valid JSON
+    assert set(payload) == {"detail"}
+    assert all({"type", "loc", "msg"} <= set(entry) for entry in payload["detail"])
+    assert_no_real_client()
+
+
+@pytest.mark.parametrize("name, route, text, loc, original", SURROGATE_CASES, ids=SURROGATE_IDS)
+def test_the_422_for_a_lone_surrogate_carries_the_security_headers(api_client, stub_model, name, route, text, loc, original):
+    """CLAUDE.md "API": every response except the docs carries them, the 422 included."""
+    response = send_surrogate(api_client, route, text)
+    assert response.status_code == 422
+    for header in SECURITY_HEADERS:
+        assert header in response.headers, header
+    assert response.headers["x-content-type-options"] == "nosniff" and response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["content-security-policy"].startswith("default-src 'none'")
+
+
+@pytest.mark.parametrize("name, route, text, loc, original", SURROGATE_VALUE_CASES, ids=[case[0] for case in SURROGATE_VALUE_CASES])
+def test_pinned_the_422_echoes_the_surrogate_string_it_rejected(api_client, stub_model, name, route, text, loc, original):
+    """Unwritten behaviour, not a deviation: the input is echoed, as for every other 422 (see test_pinned_a_422_echoes_the_input_it_rejected).
+    After decoding the JSON the echoed input is the original string, surrogate included."""
+    inputs = [entry.get("input") for entry in send_surrogate(api_client, route, text).json()["detail"]]
+    assert original in inputs
+
+
+@pytest.mark.parametrize("name, route, text, loc, original", SURROGATE_VALUE_CASES, ids=[case[0] for case in SURROGATE_VALUE_CASES])
+def test_pinned_the_surrogate_is_written_as_an_ascii_escape_in_the_body(api_client, stub_model, name, route, text, loc, original):
+    """Unwritten behaviour, not a deviation: UTF-8 cannot hold the character, so the body carries it as the escape \\udXXX (plain ASCII)."""
+    content = send_surrogate(api_client, route, text).content
+    surrogate = next(c for c in original if 0xD800 <= ord(c) <= 0xDFFF)
+    assert content.isascii() and ("\\u%04x" % ord(surrogate)).encode() in content
+
+
+@pytest.mark.parametrize("name, route, text, loc, original", SURROGATE_CASES, ids=SURROGATE_IDS)
+def test_pinned_the_body_is_compact_json_like_every_other_422(api_client, stub_model, name, route, text, loc, original):
+    """Unwritten behaviour, not a deviation: FastAPI's own 422 bodies have no spaces after "," and ":". The body for a lone surrogate keeps that
+    form, so parsing it and writing it again the same way (ASCII escapes, compact) gives back the very same bytes."""
+    content = send_surrogate(api_client, route, text).content
+    assert json.dumps(json.loads(content), separators=(",", ":")).encode("ascii") == content
+
+
+def test_the_app_still_answers_after_a_lone_surrogate_request(api_client, stub_model):
+    for name, route, text, loc, original in SURROGATE_CASES[:3]:
+        assert send_surrogate(api_client, route, text).status_code == 422
+    assert api_client.get("/health").status_code == 200
+    assert post(api_client, "/search", body("/search")).status_code == 200
+
+
+PAIR = "\\u%04x\\u%04x" % (0xD83D, 0xDE00)  # the JSON escape of ONE emoji (a valid surrogate pair), built here so that no pair is written out
+
+
+@pytest.mark.parametrize("text", [r'{"question": "a\u0000b"}', '{"question": "%s"}' % PAIR, '{"question": "vpn %s outage"}' % PAIR],
+                         ids=["NUL", "emoji pair", "emoji pair in a sentence"])
+def test_pinned_a_nul_or_an_emoji_pair_in_a_question_is_still_accepted(api_client, stub_model, text):
+    """Unwritten behaviour, not a deviation. A valid surrogate PAIR is one character (an emoji), not a lone surrogate, and NUL is valid
+    JSON text: both are accepted (200) as before the handler existed."""
+    response = send_surrogate(api_client, "/chat", text)
+    assert response.status_code == 200 and "answer" in response.json()
+
+
+# The 422 body of every input WITHOUT a lone surrogate must be byte-identical to FastAPI's own default handler.
+
+@pytest.fixture(scope="module")
+def reference():
+    """A reference app with the same request models and FastAPI's own request_validation_exception_handler (called directly, through a
+    recorder). Returns (client, responses): the handler's response for every request the reference app rejected."""
+    from fastapi import FastAPI
+    from fastapi.exception_handlers import request_validation_exception_handler
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.testclient import TestClient
+
+    from app.schemas import ChatRequest, SearchRequest
+
+    app = FastAPI()
+    responses = []
+
+    @app.exception_handler(RequestValidationError)
+    async def default_handler(request, error):
+        response = await request_validation_exception_handler(request, error)
+        responses.append(response)
+        return response
+
+    @app.post("/chat")
+    def chat_route(payload: ChatRequest):
+        return {}
+
+    @app.post("/search")
+    def search_route(payload: SearchRequest):
+        return {}
+
+    with TestClient(app) as client:
+        yield client, responses
+
+
+def as_json(value):
+    return json.dumps(value).encode("utf-8")
+
+
+NON_SURROGATE_INPUTS = [  # (id, route, body bytes, a byte string the 422 body must contain, or None)
+    ("empty question", "/chat", as_json({"question": ""}), None),
+    ("blank question", "/chat", as_json({"question": "   "}), None),
+    ("long question", "/chat", as_json({"question": "x" * 1001}), None),
+    ("search empty query", "/search", as_json({"query": ""}), None),
+    ("search missing query", "/search", b"{}", None),
+    ("k too small", "/chat", as_json({"question": "q", "k": 0}), None),
+    ("k too large", "/search", as_json({"query": "q", "k": 99}), None),
+    ("bad role", "/chat", as_json({"question": "q", "history": [{"role": "system", "content": "x"}]}), None),
+    ("extra field", "/chat", as_json({"question": "q", "extra": 1}), None),
+    ("bad date", "/chat", as_json({"question": "q", "filters": {"date_from": "2026-13-45"}}), None),
+    ("dates out of order", "/search", as_json({"query": "q", "filters": {"date_from": "2026-02-01", "date_to": "2026-01-01"}}), None),
+    ("accents echoed", "/chat", json.dumps({"question": "q", "filters": {"date_from": "héllo"}}, ensure_ascii=False).encode("utf-8"),
+     "héllo".encode("utf-8")),
+    ("emoji echoed", "/chat", json.dumps({"question": "q", "filters": {"date_from": "\U0001f600"}}, ensure_ascii=False).encode("utf-8"),
+     "\U0001f600".encode("utf-8")),
+    ("emoji pair as escapes echoed", "/search", ('{"query": "q", "filters": {"date_to": "%s"}}' % PAIR).encode("ascii"), "\U0001f600".encode("utf-8")),
+    ("NUL echoed", "/chat", rb'{"question": "q", "filters": {"date_from": "a\u0000b"}}', rb"a\u0000b"),
+    ("not JSON", "/chat", b"{not json", None),
+    ("not JSON, search", "/search", b"", None),
+    ("list body", "/chat", b"[1, 2]", None),
+    ("string body", "/search", b'"text"', None),
+]
+
+
+@pytest.mark.parametrize("name, route, content, needle", NON_SURROGATE_INPUTS, ids=[case[0] for case in NON_SURROGATE_INPUTS])
+def test_the_422_for_any_other_invalid_input_is_byte_identical_to_fastapis_default(api_client, stub_model, reference, name, route, content, needle):
+    ref_client, ref_responses = reference
+    before = len(ref_responses)
+    ref_client.post(route, content=content, headers=JSON_HEADERS)
+    assert len(ref_responses) == before + 1, "the reference app did not reject this input"
+    expected = ref_responses[-1]
+    assert expected.status_code == 422
+    if needle is not None:
+        assert needle in expected.body, "the check would be vacuous: the expected body does not echo the characters this case is about"
+    actual = raw(api_client, route, content)
+    assert actual.status_code == expected.status_code == 422
+    assert actual.content == bytes(expected.body)
+    assert actual.headers["content-type"] == expected.headers["content-type"]
+    assert stub_model.calls == []
+
+
+# FINDING F10 (found while probing this section): a non-finite number in the body (NaN, Infinity, -Infinity, or 1e999, which Python reads as
+# infinity) is not a lone surrogate but fails in the same place: the 422 body echoes the number and Starlette's JSONResponse refuses it
+# (allow_nan=False, ValueError), so the answer is a 500 instead of the 422 the rule above asks for. Written as xfail(strict=True): the expected
+# value comes from the rule, and when the code is fixed the marker must be removed. NOT fixed in this step.
+
+@pytest.mark.xfail(strict=True, reason="finding F10: a NaN or Infinity number in the body gives a 500 instead of a 422")
+@pytest.mark.parametrize("route, content", [
+    ("/chat", b'{"question": "q", "k": NaN}'), ("/chat", b'{"question": "q", "k": Infinity}'), ("/search", b'{"query": "q", "k": -Infinity}'),
+    ("/chat", b'{"question": "q", "k": 1e999}'), ("/chat", b'{"question": "q", "filters": {"category": NaN}}'), ("/chat", b'{"question": NaN}'),
+    ("/chat", b'{"question": "q", "history": [{"role": "user", "content": Infinity}]}'),
+], ids=["k NaN", "k Infinity", "k -Infinity", "k 1e999", "filter NaN", "question NaN", "history content Infinity"])
+def test_a_non_finite_number_in_the_body_is_a_422_with_the_detail_list(api_client, stub_model, route, content):
+    assert_rejected(raw(api_client, route, content), stub_model)

@@ -31,8 +31,8 @@ code does today. It is not a deviation from a written rule. Each one names its f
   F4 the id attribute of a ticket block is not escaped     F8 the client controls its own history (not tested: nothing to observe)
 If one of them is wrong, change the test together with the code.
 
-Deliberately NOT tested: a lone surrogate (for example "\\ud800") in a request. It never reaches the prompt: FastAPI's 422 body cannot be
-rendered and the app answers 500 instead of 422 (see the report of this step, finding F9). Everything else with NUL and emoji is tested.
+Not tested here: a lone surrogate (for example "\\ud800") in a request. It never reaches the prompt (the request is rejected with a 422); the
+cases are in test_api_validation.py, section "A lone surrogate in a request body". NUL and emoji in a question are tested here.
 
 Hostile tickets reach the prompt through monkeypatches of rag.search and rag.ticket_records (undone after every test; a module guard
 proves the originals are back and the index copy is unchanged) or through the pure functions directly. The database is never written.

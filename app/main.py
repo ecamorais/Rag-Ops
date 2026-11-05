@@ -1,5 +1,6 @@
 """FastAPI backend over the RAG core: health, filters, search, ticket detail and chat."""
 
+import json
 import logging
 import math
 import re
@@ -8,8 +9,10 @@ import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Path, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -175,6 +178,17 @@ async def llm_error_handler(request: Request, error: llm.LlmError):
 async def http_error_handler(request: Request, error: StarletteHTTPException):
     codes = {404: "not_found", 405: "method_not_allowed"}
     return _error(error.status_code, str(error.detail), codes.get(error.status_code, "http_error"), error.headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, error: RequestValidationError):
+    # The same 422 body as FastAPI's own handler. Only when the echoed "input" holds a lone surrogate (JSON "\ud800"), which UTF-8 cannot
+    # encode, the body is written with ASCII escapes instead of failing with a 500.
+    content = {"detail": jsonable_encoder(error.errors())}
+    try:
+        return JSONResponse(status_code=422, content=content)
+    except UnicodeEncodeError:
+        return Response(json.dumps(content, separators=(",", ":")), status_code=422, media_type="application/json")
 
 
 @app.get("/health", response_model=HealthResponse)
