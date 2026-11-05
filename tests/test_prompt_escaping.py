@@ -548,8 +548,8 @@ def test_pinned_unusual_characters_in_history_are_accepted_over_http(api_client,
 # =====================================================================================================================================
 # A TEXT SCAN of static/ (a tripwire, NOT a proof that the page is safe)
 # It reads the source files as text and looks for the APIs and attributes that CLAUDE.md ("Chat UI") and README.md:146-147 rule out: markup
-# strings, eval and string timers, inline handlers and styles, URLs that load from another origin. It sits next to the Node suites and the
-# browser run, which are not in the repository (the scan is the only guard that runs under pytest). What it CANNOT see: a name built at run
+# strings, eval and string timers, inline handlers and styles, URLs that load from another origin. It sits next to the Node suites in tests/ui
+# (run under pytest by test_ui_node.py) and the browser run, which is not in the repository. What it CANNOT see: a name built at run
 # time ("inner" + "HTML"), the Function constructor reached through another object, code that is fetched, and anything the browser does
 # with a page it has loaded. A pass here means only that none of the listed words appear in the listed files. The comments are scanned too:
 # a comment that names a forbidden API is flagged on purpose (a text scan cannot tell it from code).
