@@ -127,6 +127,13 @@ def cookie_secure(settings, *, is_https):
     return True if settings.cookie_secure == "always" else bool(is_https)
 
 
+def auth_enabled(environ=None):
+    """Whether AUTH_ENABLED is on, reading that one variable only (the process environment unless `environ` is given). The app asks this first: with auth off no
+    other AUTH_* variable is read, so a typo in one of them cannot stop a server that runs without login. A value that is neither true nor false raises AuthConfigError."""
+    env = os.environ if environ is None else environ
+    return _flag(env, "AUTH_ENABLED", False)
+
+
 def _text(env, name, default):
     value = env.get(name)
     return default if value is None else value

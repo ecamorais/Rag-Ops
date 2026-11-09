@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from app.auth.config import AuthConfigError, AuthSettings, cookie_secure
+from app.auth.config import AuthConfigError, AuthSettings, auth_enabled, cookie_secure
 
 ROOT = Path(__file__).resolve().parents[2]
 JUNK = "bogus-91827364550"  # a value no message may echo
@@ -316,6 +316,89 @@ def test_without_a_mapping_from_env_reads_the_process_environment(monkeypatch):
     monkeypatch.setenv("AUTH_SIGNUP", "closed")
     s = AuthSettings.from_env()
     assert s.enabled is True and s.signup == "closed"
+
+
+# --- auth_enabled: the switch is read on its own (Phase 3, step A) ---------------------------------------------------------------------------------------------
+
+TRUE_WORDS, FALSE_WORDS = ["1", "true", "TRUE", " Yes ", "on"], ["0", "false", "FALSE", " No ", "off"]
+
+
+@pytest.mark.parametrize("text", TRUE_WORDS)
+def test_auth_enabled_accepts_the_true_words(text):
+    assert auth_enabled({"AUTH_ENABLED": text}) is True
+
+
+@pytest.mark.parametrize("text", FALSE_WORDS)
+def test_auth_enabled_accepts_the_false_words(text):
+    assert auth_enabled({"AUTH_ENABLED": text}) is False
+
+
+@pytest.mark.parametrize("env", [{}, {"AUTH_ENABLED": ""}, {"AUTH_ENABLED": "   "}], ids=["unset", "empty", "blank"])
+def test_auth_enabled_is_off_when_unset_or_blank(env):
+    assert auth_enabled(env) is False
+
+
+@pytest.mark.parametrize("text", [JUNK, "ture", "2", "yes please", "enabled"])
+def test_auth_enabled_refuses_any_other_word_naming_the_variable_and_never_the_value(text):
+    with pytest.raises(AuthConfigError) as caught:
+        auth_enabled({"AUTH_ENABLED": text})
+    assert "AUTH_ENABLED" in str(caught.value) and text.strip() not in str(caught.value)
+
+
+@pytest.mark.parametrize("text", TRUE_WORDS + FALSE_WORDS + ["", "  "])
+def test_auth_enabled_agrees_with_from_env(text):
+    assert auth_enabled({"AUTH_ENABLED": text}) is AuthSettings.from_env({"AUTH_ENABLED": text}).enabled
+
+
+def test_auth_enabled_ignores_every_other_variable_even_a_wrong_one():
+    wrong = {name: JUNK for name in ALL_VARIABLES if name != "AUTH_ENABLED"}
+    assert auth_enabled(wrong) is False
+    assert auth_enabled({**wrong, "AUTH_ENABLED": "true"}) is True
+    with pytest.raises(AuthConfigError):  # the whole set is still refused by from_env: the switch is what keeps a typo from stopping an auth-off server
+        AuthSettings.from_env(wrong)
+
+
+def test_auth_enabled_reads_only_auth_enabled_from_the_mapping_it_is_given():
+    class Spy(dict):
+        def __init__(self, *args):
+            super().__init__(*args)
+            self.reads = []
+
+        def get(self, key, default=None):
+            self.reads.append(key)
+            return super().get(key, default)
+
+        def __getitem__(self, key):
+            self.reads.append(key)
+            return super().__getitem__(key)
+
+        def __contains__(self, key):
+            self.reads.append(key)
+            return super().__contains__(key)
+
+        def __iter__(self):
+            self.reads.append("<iter>")
+            return super().__iter__()
+
+    spy = Spy({"AUTH_ENABLED": "true", "AUTH_USERS": "alice:x", "AUTH_SCRYPT_N": JUNK})
+    assert auth_enabled(spy) is True
+    assert spy.reads == ["AUTH_ENABLED"]
+
+
+def test_auth_enabled_with_a_mapping_does_not_touch_the_process_environment(monkeypatch):
+    real = Recorder({"AUTH_ENABLED": "true"})
+    monkeypatch.setattr(os, "environ", real)
+    assert auth_enabled({"AUTH_ENABLED": "false"}) is False
+    assert real.reads == []
+
+
+def test_auth_enabled_without_a_mapping_reads_the_process_environment(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    assert auth_enabled() is True
+    monkeypatch.setenv("AUTH_ENABLED", "off")
+    assert auth_enabled() is False
+    monkeypatch.delenv("AUTH_ENABLED")
+    assert auth_enabled() is False
 
 
 # --- importing reads nothing (a real subprocess with an environment-read recorder) ---------------------------------------------------------------------------
