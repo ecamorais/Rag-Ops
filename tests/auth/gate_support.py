@@ -243,10 +243,107 @@ def raw_call(app, method, path, headers, chunks=()):
         elif message["type"] == "http.response.body":
             result.body += message.get("body", b"")
 
+    path, _, query = path.partition("?")  # a server never puts the query in the path
     scope = {
         "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method, "scheme": "http", "path": path, "raw_path": path.encode(),
-        "query_string": b"", "root_path": "", "client": ("testclient", 50000), "server": ("testserver", 80),
+        "query_string": query.encode(), "root_path": "", "client": ("testclient", 50000), "server": ("testserver", 80),
         "headers": [(b"host", b"testserver")] + [(k.encode("latin-1"), v.encode("latin-1")) for k, v in headers],
     }
     asyncio.run(app(scope, receive, send))
     return result
+
+
+# --- step D: the throwaway app with the REAL router (app/auth/routes.py) ---------------------------------------------------------------------------------
+
+import json  # noqa: E402
+
+from app.auth.routes import AUTH_POLICY, router as auth_router  # noqa: E402
+
+ROUTES_POLICY = {("GET", "/filters"): "session", ("POST", "/chat"): "session", ("GET", "/health"): "optional", **AUTH_POLICY}
+AUTH_PATHS = ("/auth/login", "/auth/signup", "/auth/logout", "/auth/logout-all", "/auth/me")
+ALL_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+DEFAULT = object()
+
+
+def build_routes_app(static_dir, *, lifespan=None):
+    """The real /auth router and the real middleware with the real policy of the auth routes, three probe routes (/filters and /chat need a session, /health
+    is optional) and the static mount at "/" like the real app."""
+    app = FastAPI(lifespan=lifespan)
+    app.state.calls = []
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(request, error):  # the same shape as app/main.py
+        codes = {404: "not_found", 405: "method_not_allowed"}
+        return JSONResponse({"error": str(error.detail), "code": codes.get(error.status_code, "http_error")}, status_code=error.status_code, headers=error.headers)
+
+    def who(request):
+        session = request.scope.get("auth_session")
+        return {"user": session.username if session is not None else None}
+
+    @app.get("/filters")
+    async def filters(request: Request):
+        request.app.state.calls.append(("/filters", None))
+        return who(request)
+
+    @app.post("/chat")
+    def chat(request: Request):
+        request.app.state.calls.append(("/chat", None))
+        return who(request)
+
+    @app.get("/health")
+    async def health(request: Request):
+        return who(request)
+
+    app.include_router(auth_router)
+    static_dir.mkdir(exist_ok=True)
+    for name, text in (("index.html", "<p>hello</p>"), ("app.js", "// js")):
+        if not (static_dir / name).exists():
+            (static_dir / name).write_text(text)
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    app.add_middleware(AuthMiddleware, policy=ROUTES_POLICY, hidden=HIDDEN)
+    return app
+
+
+class RouteRig(Rig):
+    """Rig for the real router. The test client keeps a cookie jar and would send the cookies of an earlier answer by itself; here the jar is emptied after every
+    request, so a request carries only the cookies the test sets by hand. base_url="https://testserver" makes the scheme https."""
+
+    def __init__(self, app, env, clock, *, base_url="http://testserver"):
+        self.app, self.env, self.clock, self.origin = app, env, clock, base_url
+        self.client = TestClient(app, base_url=base_url, raise_server_exceptions=False, follow_redirects=False)
+        app.state.auth = env.svc
+
+    def send(self, method, path, session=None, *, origin=DEFAULT, **kwargs):
+        response = super().send(method, path, session, origin=self.origin if origin is DEFAULT else origin, **kwargs)
+        self.client.cookies.clear()
+        return response
+
+    def post_json(self, path, payload, session=None, **kwargs):
+        """POST a JSON body (an object, or raw bytes to send as they are) with the JSON media type."""
+        content = payload if isinstance(payload, (bytes, bytearray)) else json.dumps(payload).encode("utf-8")
+        headers = [("Content-Type", "application/json")] + list(kwargs.pop("headers", ()))
+        return self.send("POST", path, session, content=bytes(content), headers=headers, **kwargs)
+
+    def login_http(self, username, password, **kwargs):
+        return self.post_json("/auth/login", {"username": username, "password": password}, **kwargs)
+
+
+def parse_set_cookie(header):
+    """'name=value; Attr; Attr=v' -> (name, value, {attribute: value or True})."""
+    first, *rest = header.split("; ")
+    name, _, value = first.partition("=")
+    attributes = {}
+    for part in rest:
+        key, equals, val = part.partition("=")
+        attributes[key] = val if equals else True
+    return name, value, attributes
+
+
+def cookies_of(response):
+    """{name: (value, attributes)} from the separate Set-Cookie header lines of a response; asserts there is no duplicate name and no comma-joined line."""
+    out = {}
+    for line in response.headers.get_list("set-cookie"):
+        name, value, attributes = parse_set_cookie(line)
+        assert name not in out and line.count("=") >= 1
+        out[name] = (value, attributes)
+    return out

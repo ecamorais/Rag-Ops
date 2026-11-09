@@ -4,13 +4,17 @@ Standard library, Starlette and app.auth only. It reads the service from scope["
 the request goes straight through with no work at all (no cookie is read, no database is touched). It logs nothing, and none of its answers holds a cookie
 value, a token, a user name or an address.
 
-Route classes come from a table given to the constructor, {(METHOD or "*", path template): "public" | "session" | "optional"}, and are looked up with the app's
-own routes (route.matches), so the class is the one of the route the router would really run:
+Route classes come from a table given to the constructor, {(METHOD or "*", path template): "public" | "session" | "optional"}, with the paths as the app
+serves them (a prefix given to include_router is part of the path). The templates are compiled with starlette.routing.compile_path and matched against the
+request path, so the lookup does not depend on how the framework stores its routes (FastAPI keeps an included router as one opaque entry):
   public    no session needed (login, sign-up, the static files). An unsafe method still has to pass origin_ok().
   optional  a valid session is attached if a cookie is present, and nobody is ever rejected (health, who-am-I). Unsafe methods: as public.
   session   a live session is needed; an unsafe method also needs origin_ok() and a matching X-CSRF-Token.
-A route that is matched but not in the table is "session" (default-deny). A wrong method on a known path gets the strictest class of that path (the static mount
-would otherwise answer it, and it must not be a way round). Any Mount (the static files) is public. No route at all is "session". The session is put in
+The class of a request is, in this order: the entries whose template matches the whole path and whose method is the request's (the strictest if several), else
+the "*" entries, else the strictest class of the entries that match the path (a wrong method must not be a way round). With no entry at all it is default-deny:
+"session" if ANY route that is not the static files matches the path (route.matches, included routers and routes of a kind this module does not know
+included), "public" only if just a Mount of StaticFiles matches, and "session" if nothing matches. A Mount of anything else than StaticFiles is not public. The
+class assigned is therefore never weaker than the one of the route the router dispatches to, unless the table itself says so. The session is put in
 scope["auth_session"] (a SessionInfo); the token itself is not.
 
 Safe methods (GET, HEAD, OPTIONS) never need a CSRF check, but a "session" route still needs the session for them: an anonymous HEAD or OPTIONS gets the 401.
@@ -22,7 +26,8 @@ import re
 
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
-from starlette.routing import Match, Mount
+from starlette.routing import Match, Mount, compile_path
+from starlette.staticfiles import StaticFiles
 
 from app.auth.config import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
 from app.auth.runtime import build_set_cookie, header_values, is_https, origin_ok, parse_cookies
@@ -33,6 +38,10 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 MAX_BODY = 16384
 _DIGITS = re.compile(r"[0-9]+")
 _NO_STORE = {"Cache-Control": "no-store"}
+
+
+def _strictest(classes):
+    return max(classes, key=_STRICTNESS.get)
 
 
 class _Replied(Exception):
@@ -49,6 +58,7 @@ class AuthMiddleware:
             table[(method.upper(), path)] = klass
         self.app = app
         self._policy = table
+        self._entries = tuple((method, compile_path(path)[0], klass) for (method, path), klass in table.items())
         self._hidden = frozenset(hidden)
         self._prefix = limited_prefix.rstrip("/")
         self._max_body = max_body
@@ -92,21 +102,21 @@ class AuthMiddleware:
     # --- classification -----------------------------------------------------------------------------------------------------------------------
 
     def _classify(self, scope, method):
-        partial, mounted = None, False
+        path = scope["path"]
+        found = [(m, klass) for m, regex, klass in self._entries if regex.match(path)]
+        if found:
+            for wanted in (method, "*"):
+                chosen = [klass for m, klass in found if m == wanted]
+                if chosen:
+                    return _strictest(chosen)
+            return _strictest([klass for _, klass in found])
+        static = False
         for route in scope["app"].router.routes:
-            match, _ = route.matches(scope)
-            if isinstance(route, Mount):
-                mounted = mounted or match == Match.FULL
-                continue
-            template = getattr(route, "path", None)
-            if match == Match.FULL:
-                return self._policy.get((method, template)) or self._policy.get(("*", template)) or "session"
-            if match == Match.PARTIAL and partial is None:
-                partial = template
-        if partial is not None:
-            found = [k for (m, p), k in self._policy.items() if p == partial]
-            return max(found, key=_STRICTNESS.get) if found else "session"
-        return "public" if mounted else "session"
+            if isinstance(route, Mount) and isinstance(route.app, StaticFiles):
+                static = static or route.matches(scope)[0] == Match.FULL
+            elif route.matches(scope)[0] != Match.NONE:
+                return "session"
+        return "public" if static else "session"
 
     # --- the decision -------------------------------------------------------------------------------------------------------------------------
 
